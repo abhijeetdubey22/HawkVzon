@@ -976,8 +976,9 @@ class ParentsTab(tk.Frame):
         self.a_arrival = tk.BooleanVar(value=bool(s.get("alert_arrival")))
         self.a_late = tk.BooleanVar(value=bool(s.get("alert_late")))
         self.a_absent = tk.BooleanVar(value=bool(s.get("alert_absent")))
-        self.a_email = tk.BooleanVar(value=bool(s.get("use_email")))
-        self.a_sms = tk.BooleanVar(value=bool(s.get("use_sms")))
+        self.a_wa = tk.BooleanVar(value=bool(s.get("use_whatsapp", True)))
+        self.a_email = tk.BooleanVar(value=bool(s.get("use_email", False)))
+        self.a_sms = tk.BooleanVar(value=bool(s.get("use_sms", False)))
         self.a_late_t = tk.StringVar(value=str(s.get("late_time")))
         self.a_cut_t = tk.StringVar(value=str(s.get("absent_cutoff")))
         self.a_match = tk.StringVar(value=str(s.get("min_match")))
@@ -985,7 +986,7 @@ class ParentsTab(tk.Frame):
 
         ttk.Checkbutton(ab, text="Enable automatic alerts", variable=self.a_auto,
                         style="Card.TCheckbutton").pack(anchor="w")
-        ttk.Label(ab, text="OFF by default. Send a test email first.",
+        ttk.Label(ab, text="OFF by default. Test delivery first.",
                   style="Muted.TLabel").pack(anchor="w", pady=(0, 6))
         ttk.Label(ab, text="Send alert when the student is:", style="Card.TLabel").pack(anchor="w")
         r1 = ttk.Frame(ab, style="Inner.TFrame")
@@ -995,7 +996,9 @@ class ParentsTab(tk.Frame):
         ttk.Label(ab, text="Send through:", style="Card.TLabel").pack(anchor="w")
         r2 = ttk.Frame(ab, style="Inner.TFrame")
         r2.pack(fill="x", pady=(2, 6))
-        ttk.Checkbutton(r2, text="Email (Gmail)", variable=self.a_email,
+        ttk.Checkbutton(r2, text="WhatsApp", variable=self.a_wa,
+                        style="Card.TCheckbutton").pack(side="left", padx=(0, 12))
+        ttk.Checkbutton(r2, text="Email", variable=self.a_email,
                         style="Card.TCheckbutton").pack(side="left", padx=(0, 12))
         ttk.Checkbutton(r2, text="SMS", variable=self.a_sms,
                         style="Card.TCheckbutton").pack(side="left")
@@ -1124,6 +1127,7 @@ class ParentsTab(tk.Frame):
         self.hub.settings.update(
             auto_alerts=bool(self.a_auto.get()), alert_arrival=bool(self.a_arrival.get()),
             alert_late=bool(self.a_late.get()), alert_absent=bool(self.a_absent.get()),
+            use_whatsapp=bool(self.a_wa.get()),
             use_email=bool(self.a_email.get()), use_sms=bool(self.a_sms.get()),
             late_time=self.a_late_t.get().strip(), absent_cutoff=self.a_cut_t.get().strip(),
             min_match=mm, working_days=days)
@@ -1270,9 +1274,9 @@ class StaffTab(tk.Frame):
         sec_box.pack(fill="x", pady=(10, 0))
         self.sec_lbl = ttk.Label(sec_box, text="", style="Muted.TLabel")
         self.sec_lbl.pack(side="left")
-        ttk.Button(sec_box, text="Staff Alert Settings...", style="Secondary.TButton",
+        ttk.Button(sec_box, text="WhatsApp Settings...", style="Secondary.TButton",
                    command=self._open_staff_settings).pack(side="right")
-        ttk.Button(sec_box, text="Test Staff Alert", style="Violet.TButton",
+        ttk.Button(sec_box, text="Test WhatsApp Alert", style="Success.TButton",
                    command=hub.send_test_staff_alert).pack(side="right", padx=(0, 6))
 
     def _open_staff_settings(self):
@@ -1355,17 +1359,13 @@ class StaffTab(tk.Frame):
                          (STATUS_TAG[r["status"]],)))
         fill_tree(self.tree, rows, self.sigs, "attention")
 
-        staff_em = hub.settings.get("staff_email", "")
-        staff_ph = hub.settings.get("staff_phone", "")
-        has_cam = any("principal" in (c.get("room") or "").lower() or "principal" in c.get("name", "").lower() for c in hub.app.cameras)
-        if not hub.settings.get("alert_principal", True):
-            st_text = "🛡️ Principal Office Alert: Disabled"
-        elif not (staff_em or staff_ph):
-            st_text = "⚠️ Principal Office Alert: Staff Gmail/Phone needed"
-        elif not has_cam:
-            st_text = "ℹ️ Principal Office: Set a camera room to 'Principal\\'s Office'"
+        staff_wa = hub.settings.get("whatsapp_staff") or hub.settings.get("staff_phone", "")
+        if not hub.settings.get("use_whatsapp", True):
+            st_text = "WhatsApp Alert: Disabled"
+        elif not staff_wa:
+            st_text = "WhatsApp Alert: Staff number needed (click Settings)"
         else:
-            st_text = f"🛡️ Office Alert Active ({staff_em or staff_ph})"
+            st_text = f"WhatsApp Alert Active ({staff_wa}) with Snapshots"
         self.sec_lbl.config(text=st_text)
 
     def _schedule_redraw(self):
@@ -1805,14 +1805,20 @@ class SchoolHub:
             total += self.queue_alerts(st, rec, kind, day)
         self.app.set_status(f"{total} absent alert(s) queued - see Alert History")
 
-    # -- staff security alerts (principal's office) --
+    # -- staff security alerts (unknown person & principal's office) --
     def check_security_alerts(self):
-        """Scans recent detections on Principal's Office cameras and alerts staff if unauthorized."""
-        if not self.settings.get("alert_principal", True):
+        """Scans recent detections for unknown persons or unauthorized entry and sends WhatsApp alert with snapshot."""
+        if not self.settings.get("use_whatsapp", True) and not self.settings.get("alert_unknown", True) and not self.settings.get("alert_principal", True):
             return
+
+        wa_target = normalize_phone(
+            self.settings.get("whatsapp_staff") or self.settings.get("staff_phone"),
+            self.settings.get("default_country_code")
+        )
         staff_email = str(self.settings.get("staff_email", "")).strip()
         staff_phone = normalize_phone(self.settings.get("staff_phone", ""), self.settings.get("default_country_code"))
-        if not (staff_email or staff_phone):
+
+        if not (wa_target or staff_email or staff_phone):
             return
 
         principal_cams = set()
@@ -1824,9 +1830,6 @@ class SchoolHub:
                 if c.get("room"):
                     principal_cams.add(norm(c.get("room")))
 
-        if not principal_cams:
-            return
-
         now = datetime.now()
         try:
             with open(LOG_FILE, "r", encoding="utf-8", errors="replace", newline="") as f:
@@ -1837,10 +1840,10 @@ class SchoolHub:
         if len(rows) <= 1:
             return
 
-        raw_auth = str(self.settings.get("authorized_principal", "Principal")).split(",")
+        raw_auth = str(self.settings.get("authorized_principal", "Principal, Director, Admin")).split(",")
         auth_set = {norm(a) for a in raw_auth if norm(a)}
 
-        for row in reversed(rows[-25:]):
+        for row in reversed(rows[-30:]):
             if len(row) < 5:
                 continue
             name = row[0].strip()
@@ -1849,14 +1852,16 @@ class SchoolHub:
             ts = parse_ts(row[4])
             if ts is None:
                 continue
-            if (now - ts).total_seconds() > 15:
+            if (now - ts).total_seconds() > 25:
                 break
 
-            camera = row[5].strip() if len(row) > 5 else ""
-            if not (norm(camera) in principal_cams or any(pc in norm(camera) for pc in principal_cams)):
-                continue
+            camera = row[5].strip() if len(row) > 5 else "Security Camera"
+            is_principal_feed = (norm(camera) in principal_cams or any(pc in norm(camera) for pc in principal_cams))
+            is_unknown = norm(name) in ("stranger", "unknown", "unknown person")
+            is_unauthorized = is_principal_feed and (norm(name) not in auth_set)
 
-            if norm(name) in auth_set:
+            # Trigger only on unknown persons or unauthorized restricted entries
+            if not (is_unknown or is_unauthorized):
                 continue
 
             cooldown_key = f"{norm(name)}_{norm(camera)}"
@@ -1866,47 +1871,59 @@ class SchoolHub:
 
             self._last_sec_alerts[cooldown_key] = time.time()
 
-            subj, body, sms = compose("security", {"name": name, "klass": "Principal's Office"},
+            # Find latest captured snapshot for this event
+            snap_path = get_latest_snapshot("principal_intrusion" if is_principal_feed else "unknown")
+            if not snap_path:
+                snap_path = get_latest_snapshot()
+
+            alert_kind = "security" if is_principal_feed else "unknown"
+            subj, body, sms = compose(alert_kind, {"name": name, "klass": camera},
                                       {"first": ts, "camera": camera, "emotion": row[3] if len(row) > 3 else ""},
                                       ts.date(), self.settings.get("school_name"))
-            base = {"student": f"🚨 {name}", "klass": "Principal Office", "kind": "Security"}
-            if staff_email and EMAIL_RE.match(staff_email) and self.settings.get("gmail_user"):
-                self.alerts.enqueue(dict(base, channel="email", to=staff_email, subject=subj, body=body))
-            if staff_phone and self.settings.get("twilio_sid"):
-                self.alerts.enqueue(dict(base, channel="sms", to=staff_phone, subject="", body=sms))
+            base = {"student": f"🚨 {name}", "klass": camera, "kind": "Unknown Person" if is_unknown else "Principal Intrusion"}
 
-            self.app.set_status(f"🚨 SECURITY ALERT: Unauthorized entry in Principal's Office by '{name}'! Alert queued for staff.")
+            # Primary: WhatsApp alert with snapshot!
+            if self.settings.get("use_whatsapp", True) and wa_target:
+                self.alerts.enqueue(dict(base, channel="whatsapp", to=wa_target, subject=subj, body=sms, media_path=snap_path))
+                self.app.set_status(f"🚨 WhatsApp alert sent for unknown person on '{camera}' with snapshot!")
+
+            # Secondary channels (if explicitly turned on by user)
+            if self.settings.get("use_email") and staff_email and EMAIL_RE.match(staff_email) and self.settings.get("gmail_user"):
+                self.alerts.enqueue(dict(base, channel="email", to=staff_email, subject=subj, body=body))
+            if self.settings.get("use_sms") and staff_phone and self.settings.get("twilio_sid"):
+                self.alerts.enqueue(dict(base, channel="sms", to=staff_phone, subject="", body=sms))
 
     def send_test_staff_alert(self):
-        staff_email = str(self.settings.get("staff_email", "")).strip()
-        staff_phone = normalize_phone(self.settings.get("staff_phone", ""), self.settings.get("default_country_code"))
-        if not (staff_email or staff_phone):
-            messagebox.showwarning("Staff Alert",
-                                   "Please set the Staff Gmail address or Phone number first in Settings.",
+        staff_wa = normalize_phone(
+            self.settings.get("whatsapp_staff") or self.settings.get("staff_phone"),
+            self.settings.get("default_country_code")
+        )
+        if not staff_wa:
+            messagebox.showwarning("WhatsApp Alert",
+                                   "Please enter the Staff WhatsApp Number in Settings first.",
                                    parent=self.app.root)
             return
+
+        sid = str(self.settings.get("twilio_sid", "")).strip()
+        cb = str(self.settings.get("callmebot_key", "")).strip()
+        if not (sid or cb):
+            messagebox.showwarning("WhatsApp Provider",
+                                   "Configure Twilio Account SID & Token (or CallMeBot API key) in Settings to send WhatsApp alerts.",
+                                   parent=self.app.root)
+            return
+
         now = datetime.now()
-        subj, body, sms = compose("security", {"name": "Test Simulation", "klass": "Principal's Office"},
-                                  {"first": now, "camera": "Principal Office Cam", "emotion": "Surprise"},
+        snap = get_latest_snapshot()
+        subj, body, sms = compose("unknown", {"name": "Simulated Unknown Person", "klass": "Main Entrance"},
+                                  {"first": now, "camera": "Security Camera 1", "emotion": "Surprise"},
                                   now.date(), self.settings.get("school_name"))
-        base = {"student": "🚨 Test Simulation", "klass": "Principal Office", "kind": "Test Security"}
-        queued = 0
-        if staff_email and EMAIL_RE.match(staff_email):
-            if not self.settings.get("gmail_user"):
-                messagebox.showwarning("Gmail", "Configure your Gmail address and App Password in Settings to send emails.", parent=self.app.root)
-            else:
-                self.alerts.enqueue(dict(base, channel="email", to=staff_email, subject=subj, body=body))
-                queued += 1
-        if staff_phone:
-            if not self.settings.get("twilio_sid"):
-                messagebox.showwarning("SMS", "Configure your Twilio SMS settings to send SMS alerts.", parent=self.app.root)
-            else:
-                self.alerts.enqueue(dict(base, channel="sms", to=staff_phone, subject="", body=sms))
-                queued += 1
-        if queued:
-            messagebox.showinfo("Staff Alert",
-                                f"Test security alert queued for staff!\n\nEmail: {staff_email or 'None'}\nPhone: {staff_phone or 'None'}",
-                                parent=self.app.root)
-            self.app.set_status("Test security alert queued for staff - see Alert History")
+        base = {"student": "🚨 Test Unknown Person", "klass": "Security Camera 1", "kind": "WhatsApp Test"}
+
+        self.alerts.enqueue(dict(base, channel="whatsapp", to=staff_wa, subject=subj, body=sms, media_path=snap))
+        snap_msg = f"Attached Snapshot: {os.path.basename(snap)}" if snap else "Snapshot: Will attach live on next camera detection"
+        messagebox.showinfo("WhatsApp Alert Queued",
+                            f"Test WhatsApp alert queued successfully!\n\nRecipient: {staff_wa}\n{snap_msg}\n\nCheck Alert History for transmission status.",
+                            parent=self.app.root)
+        self.app.set_status("Test WhatsApp alert queued with snapshot photo - see Alert History")
 
 

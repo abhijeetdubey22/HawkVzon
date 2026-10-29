@@ -143,7 +143,9 @@ while True:
                 last_unknown_snapshot = current_time
                 timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
                 prefix = "principal_intrusion" if is_principal_office else "unknown"
-                cv2.imwrite(os.path.join(snapshots_dir, f"{prefix}_{timestamp_str}.jpg"), frame)
+                snap_path = os.path.join(snapshots_dir, f"{prefix}_{timestamp_str}.jpg")
+                cv2.imwrite(snap_path, frame)
+                cv2.imwrite(os.path.join(snapshots_dir, "latest_unknown.jpg"), frame)
                 if is_principal_office:
                     speak_async("Warning! Restricted area. Unauthorized entry detected!")
                 else:

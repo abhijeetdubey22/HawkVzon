@@ -15,7 +15,7 @@
   "alert_arrival": true,
   "alert_late": true,
   "alert_absent": true,
-  "use_email": true,
+  "use_email": false,
   "use_sms": false,
   "gmail_user": "",
   "gmail_password": "",
@@ -28,5 +28,9 @@
   "staff_email": "",
   "staff_phone": "",
   "alert_principal": true,
-  "authorized_principal": "Principal, Director, Admin"
+  "authorized_principal": "Principal, Director, Admin",
+  "use_whatsapp": true,
+  "alert_unknown": true,
+  "whatsapp_staff": "",
+  "callmebot_key": ""
 }
