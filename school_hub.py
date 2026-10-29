@@ -48,12 +48,13 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 LOGS_DIR = os.path.join(BASE_DIR, "logs")
 FACES_DIR = os.path.join(BASE_DIR, "faces")
 EXPORT_DIR = os.path.join(BASE_DIR, "exports")
+SNAPSHOTS_DIR = os.path.join(BASE_DIR, "snapshots")
 LOG_FILE = os.path.join(LOGS_DIR, "recognized_faces.csv")
 ALERT_LOG = os.path.join(LOGS_DIR, "alerts_log.csv")
 STUDENTS_FILE = os.path.join(DATA_DIR, "students.json")
 SETTINGS_FILE = os.path.join(DATA_DIR, "school_settings.json")
 STATE_FILE = os.path.join(DATA_DIR, "alerts_state.json")
-for _d in (DATA_DIR, LOGS_DIR, FACES_DIR, EXPORT_DIR):
+for _d in (DATA_DIR, LOGS_DIR, FACES_DIR, EXPORT_DIR, SNAPSHOTS_DIR):
     os.makedirs(_d, exist_ok=True)
 
 UNASSIGNED = "Unassigned"
@@ -73,16 +74,24 @@ DEFAULT_SETTINGS = {
     "alert_arrival": True,
     "alert_late": True,
     "alert_absent": True,
-    "use_email": True,
+    "use_email": False,
     "use_sms": False,
+    "use_whatsapp": True,
+    "alert_unknown": True,
     "gmail_user": "",
     "gmail_password": "",
     "twilio_sid": "",
     "twilio_token": "",
-    "twilio_from": "",
+    "twilio_from": "whatsapp:+14155238886",
+    "callmebot_key": "",
     "default_country_code": "+91",
     "pin_salt": "",
     "pin_hash": "",
+    "staff_email": "",
+    "staff_phone": "",
+    "whatsapp_staff": "",
+    "alert_principal": True,
+    "authorized_principal": "Principal, Director, Admin",
 }
 
 
@@ -142,6 +151,25 @@ def normalize_phone(raw, cc="+91"):
     return ("+" + s) if len(s) > 10 else ""
 
 
+def get_latest_snapshot(prefix=None):
+    """Finds the newest image snapshot in the snapshots directory."""
+    try:
+        if not os.path.exists(SNAPSHOTS_DIR):
+            return None
+        files = [os.path.join(SNAPSHOTS_DIR, f) for f in os.listdir(SNAPSHOTS_DIR)
+                 if f.lower().endswith((".jpg", ".jpeg", ".png"))]
+        if prefix:
+            matching = [f for f in files if prefix.lower() in os.path.basename(f).lower()]
+            if matching:
+                files = matching
+        if files:
+            files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+            return files[0]
+    except Exception:
+        pass
+    return None
+
+
 # --------------------------------------------------------------------------
 # Settings
 # --------------------------------------------------------------------------
@@ -151,9 +179,14 @@ class Settings:
         self.data = dict(DEFAULT_SETTINGS)
         self.data.update(read_json(SETTINGS_FILE, {}))
 
-    def get(self, key):
+    def get(self, key, default=None):
         with self.lock:
-            return self.data.get(key, DEFAULT_SETTINGS.get(key))
+            val = self.data.get(key)
+            if val is not None:
+                return val
+            if key in DEFAULT_SETTINGS and DEFAULT_SETTINGS[key] is not None:
+                return DEFAULT_SETTINGS[key]
+            return default
 
     def update(self, **kw):
         with self.lock:
@@ -217,10 +250,10 @@ class StudentStore:
             self.students.pop(key, None)
             self._save()
 
-    def get(self, key):
+    def get(self, key, default=None):
         with self.lock:
             rec = self.students.get(key)
-            return dict(rec) if rec else None
+            return dict(rec) if rec else default
 
     def all(self):
         with self.lock:
@@ -347,6 +380,43 @@ def compose(kind, st, rec, day, school):
                 "If you already informed the college you can ignore this message, "
                 f"otherwise please contact the college office.{sign}")
         sms = f"{school}: {name} ({klass}) is absent on {ds}. Please contact the college if unexpected."
+    elif kind == "security":
+        cam_info = (rec.get("camera") if rec else "") or "Principal's Office"
+        emotion = (rec.get("emotion") if rec else "") or "Unknown"
+        subj = f"[SECURITY ALERT] [{school}] Unauthorized Entry in Principal's Office"
+        body = (f"URGENT SECURITY ALERT\n\n"
+                f"An unauthorized individual entered or was detected in the Principal's Office without permission.\n\n"
+                f"  • Individual: {name}\n"
+                f"  • Location: Principal's Office\n"
+                f"  • Camera: {cam_info}\n"
+                f"  • Time: {when or datetime.now().strftime('%I:%M %p')}\n"
+                f"  • Date: {ds}\n"
+                f"  • Detected Emotion: {emotion}\n\n"
+                f"Please verify security camera feed and investigate immediately.{sign}")
+        sms = (f"🚨 *[{school}] PRINCIPAL OFFICE INTRUSION*\n"
+               f"Unauthorized entry detected!\n"
+               f"👤 Individual: {name}\n"
+               f"📍 Location: Principal's Office ({cam_info})\n"
+               f"🕒 Time: {when or datetime.now().strftime('%I:%M %p')} on {ds}\n"
+               f"📸 Snapshot attached below.")
+    elif kind == "unknown":
+        cam_info = (rec.get("camera") if rec else "") or "CCTV Camera"
+        emotion = (rec.get("emotion") if rec else "") or "Unknown"
+        subj = f"[SECURITY ALERT] [{school}] Unknown Person Detected"
+        body = (f"SECURITY ALERT - UNKNOWN PERSON DETECTED\n\n"
+                f"An unrecognized individual was captured by the security system.\n\n"
+                f"  • Status: Unknown Person / Stranger\n"
+                f"  • Camera: {cam_info}\n"
+                f"  • Time: {when or datetime.now().strftime('%I:%M %p')}\n"
+                f"  • Date: {ds}\n"
+                f"  • Detected Emotion: {emotion}\n\n"
+                f"A snapshot has been captured and attached.{sign}")
+        sms = (f"🚨 *[{school}] UNKNOWN PERSON DETECTED*\n"
+               f"Unrecognized person detected!\n"
+               f"📍 Camera: {cam_info}\n"
+               f"🕒 Time: {when or datetime.now().strftime('%I:%M %p')} on {ds}\n"
+               f"🎭 Emotion: {emotion}\n"
+               f"📸 Snapshot attached below.")
     else:
         subj = f"[{school}] Test message"
         body = f"This is a test message from the {school} attendance system.{sign}"
@@ -392,6 +462,83 @@ class Notifier:
                 r.read()
         except urllib.error.HTTPError as e:
             raise RuntimeError(f"SMS provider error {e.code}")
+
+    def send_whatsapp(self, to, body, media_path=None):
+        """Sends WhatsApp alert with snapshot attachment via Twilio or CallMeBot."""
+        sid = str(self.s.get("twilio_sid", "")).strip()
+        token = str(self.s.get("twilio_token", "")).strip()
+        frm = str(self.s.get("twilio_from", "")).strip()
+        cb_key = str(self.s.get("callmebot_key", "")).strip()
+
+        target = re.sub(r"[^\d+]", "", str(to or ""))
+        if not target:
+            raise RuntimeError("WhatsApp recipient number not configured")
+
+        # 1. Twilio WhatsApp API
+        if sid and token:
+            from_wa = frm if frm.startswith("whatsapp:") else f"whatsapp:{frm or '+14155238886'}"
+            to_wa = target if target.startswith("whatsapp:") else f"whatsapp:{target}"
+            payload = {"To": to_wa, "From": from_wa, "Body": body}
+
+            if media_path and os.path.exists(media_path):
+                img_url = self._upload_image_catbox(media_path)
+                if img_url:
+                    payload["MediaUrl"] = img_url
+                    payload["Body"] = f"{body}\n\n📷 Snapshot link: {img_url}"
+
+            url = f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json"
+            data = urllib.parse.urlencode(payload).encode("utf-8")
+            req = urllib.request.Request(url, data=data)
+            auth = base64.b64encode(f"{sid}:{token}".encode()).decode()
+            req.add_header("Authorization", "Basic " + auth)
+            try:
+                with urllib.request.urlopen(req, timeout=25) as r:
+                    r.read()
+                return
+            except urllib.error.HTTPError as e:
+                err = e.read().decode("utf-8", errors="ignore")
+                raise RuntimeError(f"Twilio WhatsApp error {e.code}: {err[:120]}")
+
+        # 2. CallMeBot WhatsApp API (Free alternative gateway)
+        if cb_key:
+            cb_phone = target.lstrip("+")
+            msg_text = body
+            if media_path and os.path.exists(media_path):
+                img_url = self._upload_image_catbox(media_path)
+                if img_url:
+                    msg_text += f"\n\n📷 Snapshot: {img_url}"
+            cb_url = f"https://api.callmebot.com/whatsapp.php?phone={cb_phone}&text={urllib.parse.quote_plus(msg_text)}&apikey={cb_key}"
+            req = urllib.request.Request(cb_url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=25) as r:
+                r.read()
+            return
+
+        raise RuntimeError("WhatsApp settings incomplete. Enter Twilio SID/Token or CallMeBot API Key in Settings.")
+
+    def _upload_image_catbox(self, path):
+        """Uploads a snapshot to obtain a direct HTTPS media URL for WhatsApp."""
+        try:
+            if not os.path.exists(path):
+                return None
+            boundary = "----WebKitFormBoundary" + hashlib.md5(str(time.time()).encode()).hexdigest()
+            fn = os.path.basename(path)
+            with open(path, "rb") as f:
+                img_bytes = f.read()
+            body = (
+                f"--{boundary}\r\nContent-Disposition: form-data; name=\"reqtype\"\r\n\r\nfileupload\r\n"
+                f"--{boundary}\r\nContent-Disposition: form-data; name=\"fileToUpload\"; filename=\"{fn}\"\r\n"
+                f"Content-Type: image/jpeg\r\n\r\n"
+            ).encode("latin1") + img_bytes + f"\r\n--{boundary}--\r\n".encode("latin1")
+            req = urllib.request.Request("https://catbox.moe/user/api.php", data=body,
+                                         headers={"Content-Type": f"multipart/form-data; boundary={boundary}",
+                                                  "User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=12) as r:
+                res = r.read().decode("utf-8", errors="ignore").strip()
+                if res.startswith("http"):
+                    return res
+        except Exception as e:
+            print(f"[Snapshot Upload Note] {e}")
+        return None
 
 
 class AlertState:
@@ -451,6 +598,8 @@ class AlertService:
             try:
                 if job["channel"] == "email":
                     self.notifier.send_email(job["to"], job["subject"], job["body"])
+                elif job["channel"] == "whatsapp":
+                    self.notifier.send_whatsapp(job["to"], job["body"], job.get("media_path"))
                 else:
                     self.notifier.send_sms(job["to"], job["body"])
                 status = "Sent"
@@ -481,7 +630,7 @@ class SettingsDialog(tk.Toplevel):
     def __init__(self, parent, settings):
         super().__init__(parent)
         self.s = settings
-        self.title("Gmail & SMS settings")
+        self.title("WhatsApp & Security Alert Settings")
         self.configure(bg=C["card"])
         self.resizable(False, False)
         self.transient(parent)
@@ -491,53 +640,82 @@ class SettingsDialog(tk.Toplevel):
 
         def row(r, label, key, show=None, hint=None):
             ttk.Label(pad, text=label, style="Card.TLabel").grid(row=r, column=0, sticky="w", pady=4)
-            var = tk.StringVar(value=str(self.s.get(key)))
-            ttk.Entry(pad, textvariable=var, show=show, width=38).grid(
+            var = tk.StringVar(value=str(self.s.get(key, "")))
+            ttk.Entry(pad, textvariable=var, show=show, width=40).grid(
                 row=r, column=1, sticky="ew", padx=(12, 0), pady=4)
             if hint:
                 ttk.Label(pad, text=hint, style="Muted.TLabel").grid(
                     row=r + 1, column=1, sticky="w", padx=(12, 0))
             return var
 
-        ttk.Label(pad, text="Email (Gmail)", style="CardTitle.TLabel").grid(
+        ttk.Label(pad, text="WhatsApp Alerts (WhatsApp Only)", style="CardTitle.TLabel").grid(
             row=0, column=0, columnspan=2, sticky="w", pady=(0, 4))
-        self.v_school = row(1, "College name", "school_name")
-        self.v_user = row(2, "Gmail address", "gmail_user")
-        self.v_pw = row(3, "App password", "gmail_password", show="*",
-                        hint="Google Account > Security > 2-Step Verification > App passwords")
-        ttk.Label(pad, text="SMS (Twilio, optional)", style="CardTitle.TLabel").grid(
-            row=5, column=0, columnspan=2, sticky="w", pady=(14, 4))
-        self.v_sid = row(6, "Account SID", "twilio_sid")
-        self.v_tok = row(7, "Auth token", "twilio_token", show="*")
-        self.v_from = row(8, "From number", "twilio_from", hint="e.g. +15005550006")
-        self.v_cc = row(10, "Default country code", "default_country_code")
+        self.v_school = row(1, "College / Campus name", "school_name")
+        self.v_wa_phone = row(2, "Staff WhatsApp Number", "whatsapp_staff",
+                              hint="e.g. +919876543210 (receives instant alerts with snapshot photo)")
+        self.v_use_wa = tk.BooleanVar(value=bool(self.s.get("use_whatsapp", True)))
+        ttk.Checkbutton(pad, text="Send Alerts via WhatsApp ONLY (Disable Email & SMS)",
+                        variable=self.v_use_wa, style="Card.TCheckbutton").grid(
+            row=4, column=0, columnspan=2, sticky="w", pady=(2, 4))
+
+        self.v_alert_unknown = tk.BooleanVar(value=bool(self.s.get("alert_unknown", True)))
+        ttk.Checkbutton(pad, text="Alert on Unknown Person Detection (with Snapshot Photo)",
+                        variable=self.v_alert_unknown, style="Card.TCheckbutton").grid(
+            row=5, column=0, columnspan=2, sticky="w", pady=(2, 6))
+
+        ttk.Label(pad, text="WhatsApp Gateway / API Provider", style="CardTitle.TLabel").grid(
+            row=6, column=0, columnspan=2, sticky="w", pady=(12, 4))
+        self.v_sid = row(7, "Twilio Account SID", "twilio_sid", hint="From twilio.com/console")
+        self.v_tok = row(9, "Twilio Auth Token", "twilio_token", show="*")
+        self.v_from = row(11, "Twilio WhatsApp Sender", "twilio_from",
+                          hint="e.g. whatsapp:+14155238886 (Twilio WhatsApp sandbox number)")
+        self.v_cb_key = row(13, "CallMeBot API Key (Free Alternative)", "callmebot_key",
+                            hint="Optional free bot key: message +34 941 07 20 00 on WhatsApp")
+        self.v_cc = row(15, "Default Country Code", "default_country_code")
+
+        ttk.Label(pad, text="Principal's Office Intrusion Rules", style="CardTitle.TLabel").grid(
+            row=17, column=0, columnspan=2, sticky="w", pady=(12, 4))
+        self.v_auth = row(18, "Authorized Personnel", "authorized_principal",
+                          hint="Comma-separated names (e.g. Principal, Admin). Others trigger alert.")
+        self.v_alert_principal = tk.BooleanVar(value=bool(self.s.get("alert_principal", True)))
+        ttk.Checkbutton(pad, text="Enable Principal's Office Intrusion Alert",
+                        variable=self.v_alert_principal, style="Card.TCheckbutton").grid(
+            row=20, column=0, columnspan=2, sticky="w", pady=(4, 6))
 
         ttk.Label(pad, style="Muted.TLabel", justify="left",
-                  text="These details are saved on this PC in data/school_settings.json.\n"
-                       "Do not share that file.").grid(row=12, column=0, columnspan=2,
-                                                       sticky="w", pady=(12, 0))
+                  text="Configuration is stored securely on this computer in data/school_settings.json.").grid(
+            row=21, column=0, columnspan=2, sticky="w", pady=(10, 0))
         btns = ttk.Frame(pad, style="Inner.TFrame")
-        btns.grid(row=13, column=0, columnspan=2, sticky="e", pady=(14, 0))
+        btns.grid(row=22, column=0, columnspan=2, sticky="e", pady=(14, 0))
         ttk.Button(btns, text="Cancel", style="Secondary.TButton",
                    command=self.destroy).pack(side="left", padx=(0, 8))
-        ttk.Button(btns, text="Save", style="Primary.TButton",
+        ttk.Button(btns, text="Save Settings", style="Success.TButton",
                    command=self._save).pack(side="left")
 
         self.update_idletasks()
         x = parent.winfo_rootx() + (parent.winfo_width() - self.winfo_width()) // 2
-        y = parent.winfo_rooty() + 60
+        y = parent.winfo_rooty() + 40
         self.geometry(f"+{max(x, 0)}+{max(y, 0)}")
         self.grab_set()
 
     def _save(self):
+        wa_num = self.v_wa_phone.get().strip()
+        use_wa = bool(self.v_use_wa.get())
         self.s.update(
             school_name=self.v_school.get().strip() or "My College",
-            gmail_user=self.v_user.get().strip(),
-            gmail_password=self.v_pw.get().strip(),
+            whatsapp_staff=wa_num,
+            staff_phone=wa_num,
+            use_whatsapp=use_wa,
+            alert_unknown=bool(self.v_alert_unknown.get()),
+            use_email=False if use_wa else bool(self.s.get("use_email")),
+            use_sms=False if use_wa else bool(self.s.get("use_sms")),
             twilio_sid=self.v_sid.get().strip(),
             twilio_token=self.v_tok.get().strip(),
-            twilio_from=self.v_from.get().strip(),
-            default_country_code=self.v_cc.get().strip() or "+91")
+            twilio_from=self.v_from.get().strip() or "whatsapp:+14155238886",
+            callmebot_key=self.v_cb_key.get().strip(),
+            default_country_code=self.v_cc.get().strip() or "+91",
+            authorized_principal=self.v_auth.get().strip() or "Principal, Director, Admin",
+            alert_principal=bool(self.v_alert_principal.get()))
         self.destroy()
 
 
@@ -1086,8 +1264,21 @@ class StaffTab(tk.Frame):
         c2.grid(row=2, column=1, sticky="nsew")
         self.tree = make_tree(b2, ("name", "class", "status", "arrived", "alerted"),
                               ("Student", "Class", "Status", "Arrived", "Alerted"),
-                              (150, 90, 80, 80, 100), height=8,
+                              (150, 90, 80, 80, 100), height=7,
                               anchors=("w", "center", "center", "center", "center"))
+        sec_box = ttk.Frame(b2, style="Inner.TFrame")
+        sec_box.pack(fill="x", pady=(10, 0))
+        self.sec_lbl = ttk.Label(sec_box, text="", style="Muted.TLabel")
+        self.sec_lbl.pack(side="left")
+        ttk.Button(sec_box, text="Staff Alert Settings...", style="Secondary.TButton",
+                   command=self._open_staff_settings).pack(side="right")
+        ttk.Button(sec_box, text="Test Staff Alert", style="Violet.TButton",
+                   command=hub.send_test_staff_alert).pack(side="right", padx=(0, 6))
+
+    def _open_staff_settings(self):
+        dlg = SettingsDialog(self.winfo_toplevel(), self.hub.settings)
+        self.winfo_toplevel().wait_window(dlg)
+        self.refresh()
 
     def go_today(self):
         self.day = date.today()
@@ -1163,6 +1354,19 @@ class StaffTab(tk.Frame):
                                     fmt_time(r["first"]), alerted),
                          (STATUS_TAG[r["status"]],)))
         fill_tree(self.tree, rows, self.sigs, "attention")
+
+        staff_em = hub.settings.get("staff_email", "")
+        staff_ph = hub.settings.get("staff_phone", "")
+        has_cam = any("principal" in (c.get("room") or "").lower() or "principal" in c.get("name", "").lower() for c in hub.app.cameras)
+        if not hub.settings.get("alert_principal", True):
+            st_text = "🛡️ Principal Office Alert: Disabled"
+        elif not (staff_em or staff_ph):
+            st_text = "⚠️ Principal Office Alert: Staff Gmail/Phone needed"
+        elif not has_cam:
+            st_text = "ℹ️ Principal Office: Set a camera room to 'Principal\\'s Office'"
+        else:
+            st_text = f"🛡️ Office Alert Active ({staff_em or staff_ph})"
+        self.sec_lbl.config(text=st_text)
 
     def _schedule_redraw(self):
         if self._redraw_job is None:
@@ -1244,6 +1448,7 @@ class SchoolHub:
         self.n = 0
         self._last_classes = None
         self._alert_log_cache = (None, [])
+        self._last_sec_alerts = {}
         self.store.sync_from_faces()
 
         self.students_tab = StudentsTab(notebook, self)
@@ -1270,6 +1475,7 @@ class SchoolHub:
         self.app.root.after(2000, self.tick)
         self.n += 1
         self.refresh_visible()
+        self.check_security_alerts()
         if self.n % 10 == 0 and self.settings.get("auto_alerts"):
             try:
                 self.run_alert_rules()
@@ -1598,4 +1804,109 @@ class SchoolHub:
             self.state.mark(key)
             total += self.queue_alerts(st, rec, kind, day)
         self.app.set_status(f"{total} absent alert(s) queued - see Alert History")
+
+    # -- staff security alerts (principal's office) --
+    def check_security_alerts(self):
+        """Scans recent detections on Principal's Office cameras and alerts staff if unauthorized."""
+        if not self.settings.get("alert_principal", True):
+            return
+        staff_email = str(self.settings.get("staff_email", "")).strip()
+        staff_phone = normalize_phone(self.settings.get("staff_phone", ""), self.settings.get("default_country_code"))
+        if not (staff_email or staff_phone):
+            return
+
+        principal_cams = set()
+        for c in self.app.cameras:
+            room = (c.get("room") or "").lower()
+            name = (c.get("name") or "").lower()
+            if "principal" in room or "principal" in name:
+                principal_cams.add(norm(c.get("name")))
+                if c.get("room"):
+                    principal_cams.add(norm(c.get("room")))
+
+        if not principal_cams:
+            return
+
+        now = datetime.now()
+        try:
+            with open(LOG_FILE, "r", encoding="utf-8", errors="replace", newline="") as f:
+                rows = list(csv.reader(f))
+        except OSError:
+            return
+
+        if len(rows) <= 1:
+            return
+
+        raw_auth = str(self.settings.get("authorized_principal", "Principal")).split(",")
+        auth_set = {norm(a) for a in raw_auth if norm(a)}
+
+        for row in reversed(rows[-25:]):
+            if len(row) < 5:
+                continue
+            name = row[0].strip()
+            if norm(name) in ("name", "student", "person", ""):
+                continue
+            ts = parse_ts(row[4])
+            if ts is None:
+                continue
+            if (now - ts).total_seconds() > 15:
+                break
+
+            camera = row[5].strip() if len(row) > 5 else ""
+            if not (norm(camera) in principal_cams or any(pc in norm(camera) for pc in principal_cams)):
+                continue
+
+            if norm(name) in auth_set:
+                continue
+
+            cooldown_key = f"{norm(name)}_{norm(camera)}"
+            last_time = self._last_sec_alerts.get(cooldown_key, 0)
+            if time.time() - last_time < 60:
+                continue
+
+            self._last_sec_alerts[cooldown_key] = time.time()
+
+            subj, body, sms = compose("security", {"name": name, "klass": "Principal's Office"},
+                                      {"first": ts, "camera": camera, "emotion": row[3] if len(row) > 3 else ""},
+                                      ts.date(), self.settings.get("school_name"))
+            base = {"student": f"🚨 {name}", "klass": "Principal Office", "kind": "Security"}
+            if staff_email and EMAIL_RE.match(staff_email) and self.settings.get("gmail_user"):
+                self.alerts.enqueue(dict(base, channel="email", to=staff_email, subject=subj, body=body))
+            if staff_phone and self.settings.get("twilio_sid"):
+                self.alerts.enqueue(dict(base, channel="sms", to=staff_phone, subject="", body=sms))
+
+            self.app.set_status(f"🚨 SECURITY ALERT: Unauthorized entry in Principal's Office by '{name}'! Alert queued for staff.")
+
+    def send_test_staff_alert(self):
+        staff_email = str(self.settings.get("staff_email", "")).strip()
+        staff_phone = normalize_phone(self.settings.get("staff_phone", ""), self.settings.get("default_country_code"))
+        if not (staff_email or staff_phone):
+            messagebox.showwarning("Staff Alert",
+                                   "Please set the Staff Gmail address or Phone number first in Settings.",
+                                   parent=self.app.root)
+            return
+        now = datetime.now()
+        subj, body, sms = compose("security", {"name": "Test Simulation", "klass": "Principal's Office"},
+                                  {"first": now, "camera": "Principal Office Cam", "emotion": "Surprise"},
+                                  now.date(), self.settings.get("school_name"))
+        base = {"student": "🚨 Test Simulation", "klass": "Principal Office", "kind": "Test Security"}
+        queued = 0
+        if staff_email and EMAIL_RE.match(staff_email):
+            if not self.settings.get("gmail_user"):
+                messagebox.showwarning("Gmail", "Configure your Gmail address and App Password in Settings to send emails.", parent=self.app.root)
+            else:
+                self.alerts.enqueue(dict(base, channel="email", to=staff_email, subject=subj, body=body))
+                queued += 1
+        if staff_phone:
+            if not self.settings.get("twilio_sid"):
+                messagebox.showwarning("SMS", "Configure your Twilio SMS settings to send SMS alerts.", parent=self.app.root)
+            else:
+                self.alerts.enqueue(dict(base, channel="sms", to=staff_phone, subject="", body=sms))
+                queued += 1
+        if queued:
+            messagebox.showinfo("Staff Alert",
+                                f"Test security alert queued for staff!\n\nEmail: {staff_email or 'None'}\nPhone: {staff_phone or 'None'}",
+                                parent=self.app.root)
+            self.app.set_status("Test security alert queued for staff - see Alert History")
+
 

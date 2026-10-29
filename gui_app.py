@@ -292,7 +292,8 @@ class CameraDialog(tk.Toplevel):
 
         ttk.Label(pad, text="Class / room this camera covers", style="Card.TLabel").pack(anchor="w")
         self.room_var = tk.StringVar(value=(cam.get("room", "") if cam else ""))
-        ttk.Combobox(pad, textvariable=self.room_var, values=list(classes)).pack(fill="x", pady=(2, 10))
+        suggested = ["Principal's Office"] + [c for c in classes if c != "Principal's Office"]
+        ttk.Combobox(pad, textvariable=self.room_var, values=suggested).pack(fill="x", pady=(2, 10))
 
         ttk.Label(pad, text="Source type", style="Card.TLabel").pack(anchor="w")
         self.kind_var = tk.StringVar(value=cam["kind"] if cam else SOURCE_CCTV)

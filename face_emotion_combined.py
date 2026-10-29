@@ -76,12 +76,22 @@ log_file = os.path.join(logs_dir, "recognized_faces.csv")
 if not os.path.exists(log_file):
     with open(log_file, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["Name", "Age", "Match %", "Emotion", "Timestamp"])
+        writer.writerow(["Name", "Age", "Match %", "Emotion", "Timestamp", "Camera"])
 
-# Initialize camera backend for Windows
-cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-if not cap.isOpened():
-    cap = cv2.VideoCapture(0)
+# Initialize camera backend with environment variable support from dashboard
+src = os.environ.get("FACE_SOURCE", "0")
+src = int(src) if str(src).isdigit() else src
+cam_name = os.environ.get("FACE_CAMERA_NAME", "Camera 0")
+cam_room = os.environ.get("FACE_CLASS", "")
+is_principal_office = "principal" in cam_name.lower() or "principal" in cam_room.lower()
+window_title = f"Face & Emotion Recognition - {cam_name}"
+
+if isinstance(src, int) and os.name == "nt":
+    cap = cv2.VideoCapture(src, cv2.CAP_DSHOW)
+    if not cap.isOpened():
+        cap = cv2.VideoCapture(src)
+else:
+    cap = cv2.VideoCapture(src)
 
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
@@ -123,14 +133,21 @@ while True:
             # Audio greeting with cooldown
             if current_time - last_spoken.get(name, 0) > SPEECH_COOLDOWN:
                 last_spoken[name] = current_time
-                speak_async(f"Hello, {name}")
+                if is_principal_office:
+                    speak_async(f"Principal's Office entry logged for {name}")
+                else:
+                    speak_async(f"Hello, {name}")
         else:
             # Unknown stranger handling with cooldown
             if current_time - last_unknown_snapshot > UNKNOWN_COOLDOWN:
                 last_unknown_snapshot = current_time
                 timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-                cv2.imwrite(os.path.join(snapshots_dir, f"unknown_{timestamp_str}.jpg"), frame)
-                speak_async("Unknown person detected!")
+                prefix = "principal_intrusion" if is_principal_office else "unknown"
+                cv2.imwrite(os.path.join(snapshots_dir, f"{prefix}_{timestamp_str}.jpg"), frame)
+                if is_principal_office:
+                    speak_async("Warning! Restricted area. Unauthorized entry detected!")
+                else:
+                    speak_async("Unknown person detected!")
 
         # Emotion detection on face ROI
         top, right, bottom, left = [v * 4 for v in face_location]
@@ -153,7 +170,11 @@ while True:
             except Exception:
                 emotion_str = "Unknown"
 
-        label = f"{name} ({age}) | {match_percent:.0f}% | {emotion_str}"
+        if is_principal_office and name == "Stranger":
+            label = f"[RESTRICTED AREA] {name} | {emotion_str}"
+            color = (0, 0, 255)
+        else:
+            label = f"{name} ({age}) | {match_percent:.0f}% | {emotion_str}"
         cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
         cv2.putText(frame, label, (left, max(20, top - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)
 
@@ -162,11 +183,11 @@ while True:
             last_logged[name] = current_time
             with open(log_file, "a", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
-                writer.writerow([name, age, f"{match_percent:.1f}%", detected_emotion_name, datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
+                writer.writerow([name, age, f"{match_percent:.1f}%", detected_emotion_name, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), cam_name])
 
     # Display FPS and active system info
     cv2.putText(frame, f"FPS: {fps:.1f}", (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-    cv2.imshow("Face & Emotion Recognition", frame)
+    cv2.imshow(window_title, frame)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
