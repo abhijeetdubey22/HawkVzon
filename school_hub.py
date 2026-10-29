@@ -585,9 +585,9 @@ class StudentsTab(tk.Frame):
         kp.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 10))
         self.kpis = {}
         for i, (key, title, color) in enumerate((
-                ("total", "Students", C["primary"]), ("present", "Present", C["success"]),
-                ("late", "Late", C["amber"]), ("absent", "Absent", C["danger"]),
-                ("notyet", "Not arrived yet", C["grey"]))):
+                ("total", "Total Students", C["primary"]), ("present", "Present", C["success"]),
+                ("late", "Late Arrival", C["amber"]), ("absent", "Absent", C["danger"]),
+                ("notyet", "Not Arrived", C["grey"]))):
             kp.columnconfigure(i, weight=1, uniform="k")
             k = Kpi(kp, title, color)
             k.grid(row=0, column=i, sticky="ew", padx=(0 if i == 0 else 8, 0))
@@ -1055,10 +1055,10 @@ class StaffTab(tk.Frame):
         kp.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 10))
         self.kpis = {}
         for i, (key, title, color) in enumerate((
-                ("total", "Students", C["primary"]), ("present", "Present", C["success"]),
-                ("late", "Late", C["amber"]), ("absent", "Absent", C["danger"]),
-                ("pct", "Attendance", C["violet"]), ("cams", "Cameras online", C["success"]),
-                ("alerts", "Alerts sent today", C["amber"]))):
+                ("total", "Total Students", C["primary"]), ("present", "Present", C["success"]),
+                ("late", "Late Arrival", C["amber"]), ("absent", "Absent", C["danger"]),
+                ("pct", "Attendance Rate", C["violet"]), ("cams", "Cameras Online", C["success"]),
+                ("alerts", "Alerts Sent", C["amber"]))):
             kp.columnconfigure(i, weight=1, uniform="sk")
             k = Kpi(kp, title, color)
             k.grid(row=0, column=i, sticky="ew", padx=(0 if i == 0 else 8, 0))
@@ -1070,8 +1070,8 @@ class StaffTab(tk.Frame):
         legend.pack(fill="x", pady=(0, 6))
         for txt, color in (("Present", C["success"]), ("Late", C["amber"]),
                            ("Absent", C["danger"]), ("Not arrived", "#cbd5e1")):
-            tk.Label(legend, text="  ", bg=color).pack(side="left")
-            ttk.Label(legend, text=" " + txt + "    ", style="Muted.TLabel").pack(side="left")
+            tk.Label(legend, text="   ", bg=color, font=("Segoe UI", 4)).pack(side="left", padx=(0, 4))
+            ttk.Label(legend, text=txt + "     ", style="Muted.TLabel").pack(side="left")
         wrap = ttk.Frame(b1, style="Inner.TFrame")
         wrap.pack(fill="both", expand=True)
         self.canvas = tk.Canvas(wrap, bg="white", highlightthickness=0)
@@ -1181,16 +1181,16 @@ class StaffTab(tk.Frame):
             cv.create_text(10, y + row_h / 2 - 2, text=name, anchor="w", font=FONT, fill=C["text"])
             bw = max(w - left - right, 50)
             x = left
+            # Subtle background progress track
+            cv.create_rectangle(left, y + 8, left + bw, y + row_h - 10, fill="#f1f5f9", outline="")
             if t:
                 for val, color in ((p, C["success"]), (l, C["amber"]), (a, C["danger"]), (n, "#cbd5e1")):
                     seg = bw * val / t
                     if seg > 0:
-                        cv.create_rectangle(x, y + 6, x + seg, y + row_h - 12, fill=color, outline="")
+                        cv.create_rectangle(x, y + 8, x + seg, y + row_h - 10, fill=color, outline="")
                         x += seg
-            else:
-                cv.create_rectangle(left, y + 6, left + bw, y + row_h - 12, outline="#e5e7eb")
             pct = f"{round((p + l) * 100 / t)}%  ({p + l}/{t})" if t else "-"
-            cv.create_text(w - 10, y + row_h / 2 - 2, text=pct, anchor="e", font=FONT_B, fill=C["text"])
+            cv.create_text(w - 10, y + row_h / 2 - 2, text=pct, anchor="e", font=FONT_B, fill=C["primary"])
             y += row_h
         cv.configure(scrollregion=(0, 0, w, y + 10))
 

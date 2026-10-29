@@ -959,22 +959,23 @@ class App:
 
     def _update_pill(self):
         if not self.previewing:
-            pill = ("● NO SIGNAL", C["grey"])
+            pill = ("● NO SIGNAL", "#1e293b", "#94a3b8")
         else:
             shown = [c["id"] for c in self._shown_cams()]
             states = [self.streams[c].state for c in shown if c in self.streams]
             live = states.count("live")
             if live:
-                pill = (("● LIVE" if len(shown) == 1 else f"● LIVE {live}/{len(shown)}"), C["success"])
+                txt = "● LIVE" if len(shown) == 1 else f"● LIVE {live}/{len(shown)}"
+                pill = (txt, "#064e3b", "#34d399")
             elif states:
-                pill = ("● CONNECTING…", C["amber"])
+                pill = ("● CONNECTING…", "#78350f", "#fde68a")
             elif any(c in self.errors for c in shown):
-                pill = ("● FAILED", C["danger"])
+                pill = ("● FAILED", "#7f1d1d", "#fca5a5")
             else:
-                pill = ("● NO SIGNAL", C["grey"])
+                pill = ("● NO SIGNAL", "#1e293b", "#94a3b8")
         if pill != self.last_pill:
             self.last_pill = pill
-            self.status_pill.config(text=pill[0], bg=pill[1])
+            self.status_pill.config(text=pill[0], bg=pill[1], fg=pill[2])
 
     def _update_rec_ui(self):
         running = [c for c in self.procs if self.rec_running(c)]
@@ -983,9 +984,9 @@ class App:
             return
         self.last_rec_ui = key
         if running:
-            self.rec_pill.config(text=f"● RUNNING ({len(running)})", bg=C["success"])
+            self.rec_pill.config(text=f"● RUNNING ({len(running)})", bg="#064e3b", fg="#34d399")
         else:
-            self.rec_pill.config(text="● STOPPED", bg=C["grey"])
+            self.rec_pill.config(text="● STOPPED", bg="#1e293b", fg="#94a3b8")
         self._update_buttons()
 
     # -------------------------------------------------------------- main loop
