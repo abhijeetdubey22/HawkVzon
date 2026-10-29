@@ -1,0 +1,28 @@
+{
+  "school_name": "My College",
+  "late_time": "09:15",
+  "absent_cutoff": "10:00",
+  "min_match": 50.0,
+  "working_days": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "auto_alerts": true,
+  "alert_arrival": true,
+  "alert_late": true,
+  "alert_absent": true,
+  "use_email": true,
+  "use_sms": false,
+  "gmail_user": "",
+  "gmail_password": "",
+  "twilio_sid": "",
+  "twilio_token": "",
+  "twilio_from": "",
+  "default_country_code": "+91",
+  "pin_salt": "",
+  "pin_hash": ""
+}
