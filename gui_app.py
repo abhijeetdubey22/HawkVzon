@@ -618,15 +618,20 @@ class App:
         wrap.pack(fill="both", expand=True)
         self.tree = ttk.Treeview(wrap, columns=columns, show="headings", height=6)
         widths = {"Name": 180, "Age": 70, "Match %": 90, "Emotion": 120, "Timestamp": 190}
+        anchors = {"Name": "w", "Age": "center", "Match %": "center", "Emotion": "center", "Timestamp": "center"}
         for col in columns:
             self.tree.heading(col, text=col)
-            self.tree.column(col, width=widths[col], anchor="center")
+            self.tree.column(col, width=widths[col], anchor=anchors.get(col, "center"))
         sb = ttk.Scrollbar(wrap, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=sb.set)
         self.tree.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
-        self.tree.tag_configure("odd", background="#f8fafc")
-        self.tree.tag_configure("even", background="#ffffff")
+        self.tree.tag_configure("odd", background="#0d1424", foreground=C["text"])
+        self.tree.tag_configure("even", background="#131c31", foreground=C["text"])
+        self.tree.tag_configure("stranger_even", background="#131c31", foreground=C["amber"])
+        self.tree.tag_configure("stranger_odd", background="#0d1424", foreground=C["amber"])
+        self.tree.tag_configure("known_even", background="#131c31", foreground=C["success"])
+        self.tree.tag_configure("known_odd", background="#0d1424", foreground=C["success"])
 
     # ---------------------------------------------------------------- helpers
     def post(self, fn):
@@ -1250,8 +1255,15 @@ class App:
                 total = len(rows)
                 for i, row in enumerate(reversed(rows[-100:])):     # newest first
                     row = (row + [""] * 5)[:5]
-                    self.tree.insert("", "end", values=row,
-                                     tags=("even" if i % 2 == 0 else "odd",))
+                    parity = "even" if i % 2 == 0 else "odd"
+                    name = str(row[0]).strip().lower() if row and row[0] else ""
+                    if name in ("stranger", "unknown"):
+                        tag = f"stranger_{parity}"
+                    elif name:
+                        tag = f"known_{parity}"
+                    else:
+                        tag = parity
+                    self.tree.insert("", "end", values=row, tags=(tag,))
             except Exception:
                 pass
         self.stats.config(text=f"Cameras: {len(self.cameras)}   |   "
