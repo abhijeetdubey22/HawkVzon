@@ -1,54 +1,56 @@
-"""Shared colours, fonts, ttk styling and small reusable widgets."""
+"""Shared colours, fonts, ttk styling and small reusable widgets (Studio Dark Theme)."""
 import tkinter as tk
 from tkinter import ttk
 
 # --------------------------------------------------------------------------
-# Modern Executive Design System Palette ("Slate & Electric Blue")
-# Designed for high legibility, clean visual hierarchy, and modern aesthetics.
+# Studio Dark Design System ("Cyber Obsidian & Electric Glow")
+# Engineered for surveillance command centers, AI vision, and high contrast.
 # --------------------------------------------------------------------------
 C = dict(
     # Backgrounds & Surfaces
-    bg="#f8fafc",            # Crisp modern canvas (Slate-50)
-    card="#ffffff",          # Pure white card surface
-    card_sub="#f1f5f9",      # Subtle card sub-panel / inset (Slate-100)
-    header="#0f172a",        # Executive Midnight Slate (Slate-900)
-    header_border="#1e293b", # Hairline divider for header (Slate-800)
-    statusbar="#ffffff",     # Clean white statusbar
-    border="#e2e8f0",        # Clean border (Slate-200)
-    border_subtle="#f1f5f9", # Extra soft border (Slate-100)
-    video="#090d16",         # Studio obsidian video background
+    bg="#0b0f19",            # Deep midnight obsidian canvas
+    card="#131b2e",          # Elevated dark slate card surface
+    card_sub="#1a243c",      # Inset card section / secondary box
+    header="#060911",        # Command bar header (Deepest Charcoal)
+    header_border="#1a233a", # Clean hairline divider for header
+    statusbar="#060911",     # Clean dark statusbar
+    border="#212d47",        # Crisp dark border
+    border_subtle="#18233a", # Hairline card border
+    video="#03060c",         # Deep cinema black video backdrop
     
     # Typography
-    text="#0f172a",          # Deep slate primary text (Slate-900)
-    text_sec="#334155",      # Slate-700 secondary text
-    muted="#64748b",         # Slate-500 helper / muted text
-    subtle="#94a3b8",        # Slate-400 subtle text / placeholders
+    text="#f8fafc",          # High-contrast crisp white primary
+    text_sec="#cbd5e1",      # Slate-300 secondary text
+    muted="#8899b5",         # Slate-400 helper / muted text
+    subtle="#5d6f8e",        # Slate-500 subtle text / hints
     
-    # Primary Action (Electric Blue / Tech Indigo)
-    primary="#2563eb",       # Blue-600
-    primary_h="#1d4ed8",     # Blue-700 (hover)
-    primary_light="#eff6ff", # Blue-50 (selection / active tint)
+    # Primary Action (Electric Blue / Cyan)
+    primary="#38bdf8",       # Sky-400 / Electric Cyan-Blue
+    primary_h="#0284c7",     # Sky-600 (hover)
+    primary_btn="#2563eb",   # Solid Blue Button
+    primary_btn_h="#1d4ed8", # Solid Blue Button Hover
+    primary_light="#172554", # Deep blue highlight tint
     
-    # Semantic States (Polished & Vibrant)
+    # Semantic States (Luminous & High-Contrast)
     success="#10b981",       # Emerald-500 (Present / Online / Saved)
     success_h="#059669",     # Emerald-600
-    success_light="#ecfdf5", # Emerald-50
+    success_light="#064e3b", # Emerald-900 tint
     
-    danger="#ef4444",        # Rose-500 (Absent / Failed / Remove)
-    danger_h="#dc2626",      # Rose-600
-    danger_light="#fef2f2",  # Rose-50
+    danger="#f43f5e",        # Rose-500 (Absent / Intruder / Delete)
+    danger_h="#e11d48",      # Rose-600
+    danger_light="#4c0519",  # Rose-950 tint
     
-    violet="#6366f1",        # Indigo-500 (AI / Recognition / Accent)
-    violet_h="#4f46e5",      # Indigo-600
-    violet_light="#eef2ff",  # Indigo-50
+    violet="#8b5cf6",        # Violet-500 (AI / Recognition / WhatsApp)
+    violet_h="#7c3aed",      # Violet-600
+    violet_light="#2e1065",  # Violet-950 tint
     
-    amber="#f59e0b",         # Amber-500 (Late / Warning / Connecting)
-    amber_h="#d97706",       # Amber-600
-    amber_light="#fffbeb",   # Amber-50
+    amber="#fbbf24",         # Amber-400 (Late / Warning / Connecting)
+    amber_h="#f59e0b",       # Amber-600
+    amber_light="#451a03",   # Amber-950 tint
     
-    grey="#64748b",          # Slate-500
-    grey_h="#475569",        # Slate-600
-    grey_light="#f1f5f9",    # Slate-100
+    grey="#1e293b",          # Slate-800 secondary button
+    grey_h="#334155",        # Slate-700 hover
+    grey_light="#0f172a",    # Slate-900
 )
 
 # Typography Scale (Clean Segoe UI hierarchy)
@@ -79,14 +81,16 @@ def apply_style(root):
     s.configure("Muted.TLabel", background=C["card"], foreground=C["muted"], font=FONT_S)
     
     # Checkbuttons
-    s.configure("Card.TCheckbutton", background=C["card"], foreground=C["text"], font=FONT)
+    s.configure("Card.TCheckbutton", background=C["card"], foreground=C["text"], font=FONT,
+                indicatorbackground=C["card_sub"], indicatorforeground=C["primary"])
     s.map("Card.TCheckbutton",
           background=[("active", C["card"])],
-          foreground=[("active", C["primary"])])
+          foreground=[("active", C["primary"])],
+          indicatorbackground=[("active", C["border"])])
 
     # Solid Action Buttons
     buttons = {
-        "Primary": (C["primary"], C["primary_h"]),
+        "Primary": (C["primary_btn"], C["primary_btn_h"]),
         "Success": (C["success"], C["success_h"]),
         "Danger": (C["danger"], C["danger_h"]),
         "Violet": (C["violet"], C["violet_h"]),
@@ -96,56 +100,65 @@ def apply_style(root):
                     borderwidth=0, focusthickness=0, focuscolor=bg,
                     padding=(14, 8), font=FONT_B)
         s.map(f"{name}.TButton",
-              background=[("disabled", "#e2e8f0"), ("active", hover)],
-              foreground=[("disabled", "#94a3b8")])
-              
-    # Secondary Outline Button
-    s.configure("Secondary.TButton", background="#f1f5f9", foreground=C["text_sec"],
-                borderwidth=1, relief="solid", bordercolor=C["border"],
-                lightcolor=C["border"], darkcolor=C["border"],
-                focusthickness=0, padding=(12, 7), font=FONT_B)
+              background=[("disabled", "#1e293b"), ("active", hover)],
+              foreground=[("disabled", "#475569")])
+
+    s.configure("Secondary.TButton", background=C["grey"], foreground=C["text"],
+                borderwidth=0, focusthickness=0, padding=(14, 8), font=FONT)
     s.map("Secondary.TButton",
-          background=[("disabled", "#f8fafc"), ("active", "#e2e8f0")],
-          foreground=[("disabled", "#94a3b8"), ("active", C["text"])])
+          background=[("disabled", "#0f172a"), ("active", C["grey_h"])],
+          foreground=[("disabled", "#475569"), ("active", "#ffffff")])
 
-    # Input Controls
-    s.configure("TEntry", padding=6, fieldbackground="white", bordercolor=C["border"],
-                lightcolor=C["border"], darkcolor=C["border"])
-    s.configure("TCombobox", padding=6, fieldbackground="white", bordercolor=C["border"],
-                lightcolor=C["border"], darkcolor=C["border"])
-    s.configure("TSpinbox", padding=6, fieldbackground="white", bordercolor=C["border"],
-                lightcolor=C["border"], darkcolor=C["border"])
-    s.map("TCombobox", fieldbackground=[("readonly", "white")])
+    # Input Fields (Dark Glass Aesthetic)
+    s.configure("TEntry", padding=6, fieldbackground=C["card_sub"],
+                foreground=C["text"], bordercolor=C["border"],
+                lightcolor=C["border"], darkcolor=C["border"],
+                insertcolor=C["text"])
+    s.configure("TCombobox", padding=6, fieldbackground=C["card_sub"],
+                foreground=C["text"], bordercolor=C["border"],
+                lightcolor=C["border"], darkcolor=C["border"],
+                arrowcolor=C["text"])
+    s.configure("TSpinbox", padding=6, fieldbackground=C["card_sub"],
+                foreground=C["text"], bordercolor=C["border"],
+                lightcolor=C["border"], darkcolor=C["border"],
+                arrowcolor=C["text"])
+    s.map("TCombobox",
+          fieldbackground=[("readonly", C["card_sub"])],
+          foreground=[("readonly", C["text"])],
+          selectbackground=[("readonly", C["primary_light"])],
+          selectforeground=[("readonly", C["text"])])
 
-    # Tables / Treeview
-    s.configure("Treeview", rowheight=30, font=FONT, background="white",
-                fieldbackground="white", bordercolor=C["border"], borderwidth=0)
-    s.configure("Treeview.Heading", font=FONT_B, background="#f8fafc",
-                foreground=C["text_sec"], relief="flat", padding=7,
+    # Tables / Treeview (High-tech Dark Grid)
+    s.configure("Treeview", rowheight=32, font=FONT, background=C["card"],
+                fieldbackground=C["card"], foreground=C["text"],
+                bordercolor=C["border"], borderwidth=0)
+    s.configure("Treeview.Heading", font=FONT_B, background=C["card_sub"],
+                foreground=C["muted"], relief="flat", padding=8,
                 bordercolor=C["border"])
-    s.map("Treeview.Heading", background=[("active", "#f1f5f9")])
-    s.map("Treeview", background=[("selected", C["primary_light"])],
+    s.map("Treeview.Heading", background=[("active", C["border"])])
+    s.map("Treeview",
+          background=[("selected", C["primary_light"])],
           foreground=[("selected", C["primary"])])
 
-    # Modern Navigation Tabs (Notebook)
+    # Modern Navigation Tabs (Notebook - Sleek Dark Pills)
     s.configure("TNotebook", background=C["bg"], borderwidth=0, tabmargins=(20, 10, 20, 0))
-    s.configure("TNotebook.Tab", padding=(22, 9), font=FONT_B, background="#e2e8f0",
+    s.configure("TNotebook.Tab", padding=(26, 10), font=FONT_B, background="#111827",
                 foreground=C["muted"], borderwidth=0)
     s.map("TNotebook.Tab",
-          background=[("selected", C["card"]), ("active", "#cbd5e1")],
-          foreground=[("selected", C["primary"]), ("active", C["text"])])
+          background=[("selected", C["card"]), ("active", "#1e293b")],
+          foreground=[("selected", C["primary"]), ("active", "#ffffff")])
 
     # Custom Scrollbars
-    s.configure("Vertical.TScrollbar", background="#e2e8f0", borderwidth=0,
+    s.configure("Vertical.TScrollbar", background="#1e293b", borderwidth=0,
                 arrowsize=11, troughcolor=C["bg"])
-    s.map("Vertical.TScrollbar", background=[("active", "#cbd5e1")])
+    s.map("Vertical.TScrollbar", background=[("active", "#334155")])
 
 
 def make_card(parent, title, subtitle=None):
     outer = ttk.Frame(parent, style="Card.TFrame", padding=16)
     ttk.Label(outer, text=title, style="CardTitle.TLabel").pack(anchor="w")
     if subtitle:
-        ttk.Label(outer, text=subtitle, style="Muted.TLabel").pack(anchor="w", pady=(1, 0))
+        ttk.Label(outer, text=subtitle, style="Muted.TLabel").pack(anchor="w", pady=(2, 0))
     body = ttk.Frame(outer, style="Inner.TFrame")
     body.pack(fill="both", expand=True, pady=(10, 0))
     return outer, body

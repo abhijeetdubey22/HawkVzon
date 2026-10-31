@@ -454,9 +454,9 @@ class App:
 
         left = tk.Frame(bar, bg=C["header"])
         left.pack(side="left", padx=24)
-        tk.Label(left, text="Face & Emotion Recognition", bg=C["header"], fg="#f8fafc",
+        tk.Label(left, text="🎥  Face & Emotion Recognition Command Center", bg=C["header"], fg=C["text"],
                  font=("Segoe UI", 15, "bold")).pack(anchor="w", pady=(12, 1))
-        tk.Label(left, text="Multi-camera  •  Live attendance  •  Emotion analytics",
+        tk.Label(left, text="Multi-Camera AI Vision  •  Live Biometrics  •  Real-time Attendance & Alerts",
                  bg=C["header"], fg=C["subtle"], font=FONT_S).pack(anchor="w")
 
         right = tk.Frame(bar, bg=C["header"])
@@ -466,8 +466,8 @@ class App:
         self.rec_pill = tk.Label(right, text="● STOPPED", bg="#1e293b", fg="#94a3b8",
                                  font=("Segoe UI", 9, "bold"), padx=14, pady=5)
         self.rec_pill.pack(side="left")
-        tk.Button(right, text="🔒 PIN", command=lambda: self.hub.change_pin(), bg="#1e293b",
-                  fg="#f8fafc", activebackground="#334155", activeforeground="#ffffff",
+        tk.Button(right, text="🔒 PIN", command=lambda: self.hub.change_pin(), bg=C["card_sub"],
+                  fg=C["text"], activebackground=C["border"], activeforeground="#ffffff",
                   relief="flat", font=FONT_S, padx=12, pady=4,
                   cursor="hand2", bd=0).pack(side="left", padx=(14, 0))
 
@@ -491,7 +491,7 @@ class App:
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill="both", expand=True)
         self.tab_control = tk.Frame(self.notebook, bg=C["bg"])
-        self.notebook.add(self.tab_control, text="  Control Room  ")
+        self.notebook.add(self.tab_control, text="  🎥 Control Room  ")
         self._build_body(self.tab_control)
         self.hub = SchoolHub(self, self.notebook, self.tab_control)
         self.notebook.bind("<<NotebookTabChanged>>", self.hub.on_tab_changed)

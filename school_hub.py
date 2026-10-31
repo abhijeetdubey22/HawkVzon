@@ -1256,7 +1256,7 @@ class StaffTab(tk.Frame):
             ttk.Label(legend, text=txt + "     ", style="Muted.TLabel").pack(side="left")
         wrap = ttk.Frame(b1, style="Inner.TFrame")
         wrap.pack(fill="both", expand=True)
-        self.canvas = tk.Canvas(wrap, bg="white", highlightthickness=0)
+        self.canvas = tk.Canvas(wrap, bg=C["card"], highlightthickness=0)
         sb = ttk.Scrollbar(wrap, orient="vertical", command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=sb.set)
         self.canvas.pack(side="left", fill="both", expand=True)
@@ -1386,9 +1386,9 @@ class StaffTab(tk.Frame):
             bw = max(w - left - right, 50)
             x = left
             # Subtle background progress track
-            cv.create_rectangle(left, y + 8, left + bw, y + row_h - 10, fill="#f1f5f9", outline="")
+            cv.create_rectangle(left, y + 8, left + bw, y + row_h - 10, fill=C["card_sub"], outline="")
             if t:
-                for val, color in ((p, C["success"]), (l, C["amber"]), (a, C["danger"]), (n, "#cbd5e1")):
+                for val, color in ((p, C["success"]), (l, C["amber"]), (a, C["danger"]), (n, C["border"])):
                     seg = bw * val / t
                     if seg > 0:
                         cv.create_rectangle(x, y + 8, x + seg, y + row_h - 10, fill=color, outline="")
@@ -1454,9 +1454,9 @@ class SchoolHub:
         self.students_tab = StudentsTab(notebook, self)
         self.parents_tab = ParentsTab(notebook, self)
         self.staff_tab = StaffTab(notebook, self)
-        notebook.add(self.students_tab, text="  Students  ")
-        notebook.add(self.parents_tab, text="  Parents & Alerts  ")
-        notebook.add(self.staff_tab, text="  College Staff  ")
+        notebook.add(self.students_tab, text="  👥 Students  ")
+        notebook.add(self.parents_tab, text="  👨‍👩‍👧 Parents & WhatsApp  ")
+        notebook.add(self.staff_tab, text="  🛡️ College Staff  ")
         self.protected = {str(control_tab), str(self.parents_tab), str(self.staff_tab)}
 
     # -- lifecycle --
