@@ -1,0 +1,31 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Photos, Images, and Snapshots (NEVER push photos to git)
+*.jpg
+*.jpeg
+*.png
+*.bmp
+*.webp
+*.tiff
+snapshots/
+snapshots/*
+
+# Face recognition registration photos
+*.jpg_
+*register_face*.jpg
+
+# Local settings, passwords, and private camera configurations
+gui_config.json
+data/school_settings.json
+data/alerts_state.json
+
+# Local logs and CSV export dumps
+logs/
+exports/
+
+# Temporary / scratch testing files
+temp_*
+scratch/
