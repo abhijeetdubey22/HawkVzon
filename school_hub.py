@@ -402,10 +402,14 @@ def compose(kind, st, rec, day, school):
     elif kind == "unknown":
         cam_info = (rec.get("camera") if rec else "") or "CCTV Camera"
         emotion = (rec.get("emotion") if rec else "") or "Unknown"
+        age_profile = (rec.get("age") if rec else "") or ""
+        profile_line = f"  • Profile: {age_profile}\n" if age_profile and age_profile != "-" else ""
+        sms_profile = f"👤 Profile: {age_profile}\n" if age_profile and age_profile != "-" else ""
         subj = f"[SECURITY ALERT] [{school}] Unknown Person Detected"
         body = (f"SECURITY ALERT - UNKNOWN PERSON DETECTED\n\n"
                 f"An unrecognized individual was captured by the security system.\n\n"
                 f"  • Status: Unknown Person / Stranger\n"
+                f"{profile_line}"
                 f"  • Camera: {cam_info}\n"
                 f"  • Time: {when or datetime.now().strftime('%I:%M %p')}\n"
                 f"  • Date: {ds}\n"
@@ -414,6 +418,7 @@ def compose(kind, st, rec, day, school):
         sms = (f"🚨 *[{school}] UNKNOWN PERSON DETECTED*\n"
                f"Unrecognized person detected!\n"
                f"📍 Camera: {cam_info}\n"
+               f"{sms_profile}"
                f"🕒 Time: {when or datetime.now().strftime('%I:%M %p')} on {ds}\n"
                f"🎭 Emotion: {emotion}\n"
                f"📸 Snapshot attached below.")
@@ -1878,7 +1883,8 @@ class SchoolHub:
 
             alert_kind = "security" if is_principal_feed else "unknown"
             subj, body, sms = compose(alert_kind, {"name": name, "klass": camera},
-                                      {"first": ts, "camera": camera, "emotion": row[3] if len(row) > 3 else ""},
+                                      {"first": ts, "camera": camera, "emotion": row[3] if len(row) > 3 else "",
+                                       "age": row[1] if len(row) > 1 else ""},
                                       ts.date(), self.settings.get("school_name"))
             base = {"student": f"🚨 {name}", "klass": camera, "kind": "Unknown Person" if is_unknown else "Principal Intrusion"}
 

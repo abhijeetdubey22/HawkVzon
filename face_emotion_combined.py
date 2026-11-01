@@ -65,6 +65,31 @@ known_face_ages = np.load(ages_path, allow_pickle=True) if os.path.exists(ages_p
 model_path = os.path.join(BASE_DIR, "emotion_model.hdf5")
 emotion_classifier = EmotionClassifier(model_path)
 
+# Load age and gender models for unknown person profiling
+age_proto = os.path.join(BASE_DIR, "age_deploy.prototxt")
+age_weights = os.path.join(BASE_DIR, "age_net.caffemodel")
+gender_proto = os.path.join(BASE_DIR, "deploy_gender.prototxt")
+gender_weights = os.path.join(BASE_DIR, "gender_net.caffemodel")
+
+age_net = None
+gender_net = None
+if os.path.exists(age_proto) and os.path.exists(age_weights):
+    try:
+        age_net = cv2.dnn.readNetFromCaffe(age_proto, age_weights)
+        print(" [AI Engine] Age estimation neural network loaded.")
+    except Exception as e:
+        print(f"[Warning] Could not load age model: {e}")
+
+if os.path.exists(gender_proto) and os.path.exists(gender_weights):
+    try:
+        gender_net = cv2.dnn.readNetFromCaffe(gender_proto, gender_weights)
+        print(" [AI Engine] Gender estimation neural network loaded.")
+    except Exception as e:
+        print(f"[Warning] Could not load gender model: {e}")
+
+AGE_BUCKETS = ['(0-2)', '(4-6)', '(8-12)', '(15-20)', '(25-32)', '(38-43)', '(48-53)', '(60-100)']
+GENDER_LIST = ['Male', 'Female']
+
 # Create folders
 logs_dir = os.path.join(BASE_DIR, "logs")
 snapshots_dir = os.path.join(BASE_DIR, "snapshots")
@@ -121,6 +146,14 @@ while True:
         best_match_index = np.argmin(distances) if len(distances) > 0 else -1
         match_percent = (1 - distances[best_match_index]) * 100 if best_match_index >= 0 else 0
 
+        # Face bounding box coordinates on original frame
+        top, right, bottom, left = [v * 4 for v in face_location]
+        top = max(0, top)
+        left = max(0, left)
+        bottom = min(frame.shape[0], bottom)
+        right = min(frame.shape[1], right)
+        face_roi = frame[top:bottom, left:right]
+
         name = "Stranger"
         age = "-"
         color = (0, 0, 255)
@@ -138,6 +171,35 @@ while True:
                 else:
                     speak_async(f"Hello, {name}")
         else:
+            # Predict Age & Gender for Stranger / Unknown face
+            if face_roi.size > 0 and (gender_net is not None or age_net is not None):
+                try:
+                    blob = cv2.dnn.blobFromImage(
+                        face_roi, 1.0, (227, 227),
+                        (78.4263377603, 87.7689143744, 114.895847746),
+                        swapRB=False
+                    )
+                    det_gender = ""
+                    det_age = ""
+                    if gender_net is not None:
+                        gender_net.setInput(blob)
+                        g_preds = gender_net.forward()
+                        det_gender = GENDER_LIST[g_preds[0].argmax()]
+
+                    if age_net is not None:
+                        age_net.setInput(blob)
+                        a_preds = age_net.forward()
+                        det_age = AGE_BUCKETS[a_preds[0].argmax()]
+
+                    if det_gender and det_age:
+                        age = f"{det_gender}, {det_age}"
+                    elif det_age:
+                        age = det_age
+                    elif det_gender:
+                        age = det_gender
+                except Exception:
+                    pass
+
             # Unknown stranger handling with cooldown
             if current_time - last_unknown_snapshot > UNKNOWN_COOLDOWN:
                 last_unknown_snapshot = current_time
@@ -147,18 +209,11 @@ while True:
                 cv2.imwrite(snap_path, frame)
                 cv2.imwrite(os.path.join(snapshots_dir, "latest_unknown.jpg"), frame)
                 if is_principal_office:
-                    speak_async("Warning! Restricted area. Unauthorized entry detected!")
+                    speak_async(f"Warning! Restricted area. Unauthorized entry detected!")
                 else:
                     speak_async("Unknown person detected!")
 
         # Emotion detection on face ROI
-        top, right, bottom, left = [v * 4 for v in face_location]
-        top = max(0, top)
-        left = max(0, left)
-        bottom = min(frame.shape[0], bottom)
-        right = min(frame.shape[1], right)
-
-        face_roi = frame[top:bottom, left:right]
         emotion_str = "Unknown"
         detected_emotion_name = "-"
 
@@ -173,7 +228,7 @@ while True:
                 emotion_str = "Unknown"
 
         if is_principal_office and name == "Stranger":
-            label = f"[RESTRICTED AREA] {name} | {emotion_str}"
+            label = f"[RESTRICTED AREA] {name} ({age}) | {emotion_str}"
             color = (0, 0, 255)
         else:
             label = f"{name} ({age}) | {match_percent:.0f}% | {emotion_str}"
