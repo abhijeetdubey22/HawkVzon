@@ -490,6 +490,8 @@ class Notifier:
                 if img_url:
                     payload["MediaUrl"] = img_url
                     payload["Body"] = f"{body}\n\n📷 Snapshot link: {img_url}"
+                else:
+                    payload["Body"] = f"{body}\n\n📷 Snapshot secured locally: {os.path.basename(media_path)}"
 
             url = f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json"
             data = urllib.parse.urlencode(payload).encode("utf-8")
@@ -512,6 +514,8 @@ class Notifier:
                 img_url = self._upload_image_catbox(media_path)
                 if img_url:
                     msg_text += f"\n\n📷 Snapshot: {img_url}"
+                else:
+                    msg_text += f"\n\n📷 Snapshot secured locally: {os.path.basename(media_path)}"
             cb_url = f"https://api.callmebot.com/whatsapp.php?phone={cb_phone}&text={urllib.parse.quote_plus(msg_text)}&apikey={cb_key}"
             req = urllib.request.Request(cb_url, headers={"User-Agent": "Mozilla/5.0"})
             with urllib.request.urlopen(req, timeout=25) as r:
@@ -521,7 +525,10 @@ class Notifier:
         raise RuntimeError("WhatsApp settings incomplete. Enter Twilio SID/Token or CallMeBot API Key in Settings.")
 
     def _upload_image_catbox(self, path):
-        """Uploads a snapshot to obtain a direct HTTPS media URL for WhatsApp."""
+        """Uploads a snapshot to obtain a direct HTTPS media URL for WhatsApp (if enabled)."""
+        if not self.s.get("allow_public_snapshot_upload", False):
+            # DPDP Privacy Shield: Keep surveillance photos strictly private and local by default
+            return None
         try:
             if not os.path.exists(path):
                 return None

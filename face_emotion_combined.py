@@ -110,27 +110,55 @@ cam_name = os.environ.get("FACE_CAMERA_NAME", "Camera 0")
 cam_room = os.environ.get("FACE_CLASS", "")
 is_principal_office = "principal" in cam_name.lower() or "principal" in cam_room.lower()
 window_title = f"Face & Emotion Recognition - {cam_name}"
+HEADLESS = os.environ.get("FACE_HEADLESS", "0") == "1" or "--headless" in sys.argv
 
-if isinstance(src, int) and os.name == "nt":
-    cap = cv2.VideoCapture(src, cv2.CAP_DSHOW)
-    if not cap.isOpened():
-        cap = cv2.VideoCapture(src)
-else:
-    cap = cv2.VideoCapture(src)
+def open_camera(source):
+    if isinstance(source, int) and os.name == "nt":
+        c = cv2.VideoCapture(source, cv2.CAP_DSHOW)
+        if not c.isOpened():
+            c = cv2.VideoCapture(source)
+    else:
+        c = cv2.VideoCapture(source)
+    c.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    c.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    return c
 
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+cap = open_camera(src)
 
-print("🔍 Face & Emotion Recognition running. Press 'q' to quit.")
+mode_str = "Headless Background Mode" if HEADLESS else "HUD Window Mode"
+print(f"🔍 Face & Emotion Recognition running on '{cam_name}' ({mode_str}). Press 'q' to quit.")
 
 prev_time = time.time()
 fps = 0.0
+consecutive_drops = 0
+reconnect_attempts = 0
 
 while True:
     ret, frame = cap.read()
     if not ret:
-        print("Failed to capture frame from camera.")
-        break
+        consecutive_drops += 1
+        if consecutive_drops < 10:
+            time.sleep(0.05)
+            continue
+        print(f"⚠️ Video stream glitch detected on '{cam_name}'. Attempting auto-reconnect...")
+        time.sleep(1.5)
+        try:
+            cap.release()
+        except Exception:
+            pass
+        cap = open_camera(src)
+        if not cap.isOpened():
+            reconnect_attempts += 1
+            if reconnect_attempts > 12:
+                print(f"❌ Camera '{cam_name}' failed to reconnect after 12 attempts. Exiting.")
+                break
+            time.sleep(2.0)
+            continue
+        reconnect_attempts = 0
+        consecutive_drops = 0
+        print(f"✅ Camera '{cam_name}' reconnected successfully!")
+        continue
+    consecutive_drops = 0
 
     current_time = time.time()
     fps = 0.9 * fps + 0.1 * (1.0 / max(current_time - prev_time, 1e-5))
@@ -243,11 +271,14 @@ while True:
                 writer.writerow([name, age, f"{match_percent:.1f}%", detected_emotion_name, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), cam_name])
 
     # Display FPS and active system info
-    cv2.putText(frame, f"FPS: {fps:.1f}", (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-    cv2.imshow(window_title, frame)
-
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+    if not HEADLESS:
+        cv2.putText(frame, f"FPS: {fps:.1f}", (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+        cv2.imshow(window_title, frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+    else:
+        # In headless mode, keep CPU usage low
+        time.sleep(0.01)
 
 cap.release()
 cv2.destroyAllWindows()

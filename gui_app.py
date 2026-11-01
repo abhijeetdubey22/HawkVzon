@@ -606,6 +606,10 @@ class App:
         self.btn_rec_all = ttk.Button(act, text="Start on All Cameras",
                                       style="Secondary.TButton", command=self.toggle_recognition_all)
         self.btn_rec_all.pack(fill="x", pady=(8, 0))
+        self.show_popup_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(act, text="Show live recognition HUD window",
+                        variable=self.show_popup_var,
+                        style="Card.TCheckbutton").pack(anchor="w", pady=(8, 0))
         ttk.Button(act, text="Open Logs & Snapshots", style="Secondary.TButton",
                    command=lambda: open_folder(LOGS_DIR)).pack(fill="x", pady=(8, 0))
 
@@ -1181,6 +1185,7 @@ class App:
         env["FACE_CAMERA_NAME"] = cam["name"]
         env["FACE_CAMERA_ID"] = cid
         env["FACE_CLASS"] = cam.get("room", "")
+        env["FACE_HEADLESS"] = "0" if getattr(self, "show_popup_var", None) is None or self.show_popup_var.get() else "1"
         try:
             proc = subprocess.Popen([sys.executable or "python", SCRIPT_PATH],
                                     cwd=BASE_DIR, env=env)
