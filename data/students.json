@@ -39,16 +39,6 @@
     "parent_phone": "",
     "alerts": true
   },
-  "angel": {
-    "name": "angel",
-    "klass": "Unassigned",
-    "roll": "",
-    "age": "17",
-    "parent_name": "",
-    "parent_email": "",
-    "parent_phone": "",
-    "alerts": true
-  },
   "harsh": {
     "name": "harsh",
     "klass": "Unassigned",

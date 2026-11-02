@@ -112,163 +112,244 @@ is_principal_office = "principal" in cam_name.lower() or "principal" in cam_room
 window_title = f"Face & Emotion Recognition - {cam_name}"
 HEADLESS = os.environ.get("FACE_HEADLESS", "0") == "1" or "--headless" in sys.argv
 
-def open_camera(source):
-    if isinstance(source, int) and os.name == "nt":
-        c = cv2.VideoCapture(source, cv2.CAP_DSHOW)
-        if not c.isOpened():
-            c = cv2.VideoCapture(source)
-    else:
-        c = cv2.VideoCapture(source)
-    c.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    c.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-    return c
+class ThreadedStream:
+    """High-performance threaded stream reader. Always discards queued frames to eliminate RTSP lag."""
+    def __init__(self, source, name="Camera"):
+        self.source = source
+        self.name = name
+        self.cap = None
+        self.frame = None
+        self.ret = False
+        self.lock = threading.Lock()
+        self.running = True
+        self.last_grab = time.time()
+        self._open()
+        self.thread = threading.Thread(target=self._worker, daemon=True)
+        self.thread.start()
 
-cap = open_camera(src)
+    def _open(self):
+        try:
+            if isinstance(self.source, int) and os.name == "nt":
+                self.cap = cv2.VideoCapture(self.source, cv2.CAP_DSHOW)
+                if not self.cap.isOpened():
+                    self.cap = cv2.VideoCapture(self.source)
+            elif isinstance(self.source, str) and self.source.startswith("rtsp"):
+                # Ultra-low latency RTSP configuration
+                os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|buffer_size;1024000|max_delay;500000"
+                self.cap = cv2.VideoCapture(self.source, cv2.CAP_FFMPEG)
+            else:
+                self.cap = cv2.VideoCapture(self.source)
+
+            if self.cap is not None and self.cap.isOpened():
+                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        except Exception as e:
+            print(f"[Stream Open Error] {e}")
+
+    def _worker(self):
+        drops = 0
+        while self.running:
+            if self.cap is None or not self.cap.isOpened():
+                time.sleep(1.0)
+                self._open()
+                continue
+            ret, frame = self.cap.read()
+            if ret and frame is not None:
+                drops = 0
+                with self.lock:
+                    self.ret = ret
+                    self.frame = frame
+                    self.last_grab = time.time()
+            else:
+                drops += 1
+                if drops > 25:
+                    print(f"⚠️ Video stream lost on '{self.name}'. Auto-reconnecting...")
+                    try:
+                        self.cap.release()
+                    except Exception:
+                        pass
+                    time.sleep(1.5)
+                    self._open()
+                    drops = 0
+                else:
+                    time.sleep(0.01)
+
+    def read(self):
+        with self.lock:
+            if not self.ret or self.frame is None:
+                return False, None
+            # Do not return frames older than 4 seconds
+            if time.time() - self.last_grab > 4.0:
+                return False, None
+            return True, self.frame.copy()
+
+    def release(self):
+        self.running = False
+        if self.cap is not None:
+            try:
+                self.cap.release()
+            except Exception:
+                pass
+
+stream = ThreadedStream(src, cam_name)
 
 mode_str = "Headless Background Mode" if HEADLESS else "HUD Window Mode"
 print(f"🔍 Face & Emotion Recognition running on '{cam_name}' ({mode_str}). Press 'q' to quit.")
 
 prev_time = time.time()
 fps = 0.0
-consecutive_drops = 0
-reconnect_attempts = 0
+
+cached_faces = []
+last_demographics = {}
+frame_count = 0
+PROCESS_EVERY_N_FRAMES = 3  # High-speed interleaving: runs AI on every 3rd frame, renders at 30 FPS
+
+# Wait up to 5 seconds for first valid frame
+for _ in range(50):
+    ret, frame = stream.read()
+    if ret and frame is not None:
+        break
+    time.sleep(0.1)
 
 while True:
-    ret, frame = cap.read()
-    if not ret:
-        consecutive_drops += 1
-        if consecutive_drops < 10:
-            time.sleep(0.05)
-            continue
-        print(f"⚠️ Video stream glitch detected on '{cam_name}'. Attempting auto-reconnect...")
-        time.sleep(1.5)
-        try:
-            cap.release()
-        except Exception:
-            pass
-        cap = open_camera(src)
-        if not cap.isOpened():
-            reconnect_attempts += 1
-            if reconnect_attempts > 12:
-                print(f"❌ Camera '{cam_name}' failed to reconnect after 12 attempts. Exiting.")
-                break
-            time.sleep(2.0)
-            continue
-        reconnect_attempts = 0
-        consecutive_drops = 0
-        print(f"✅ Camera '{cam_name}' reconnected successfully!")
+    ret, frame = stream.read()
+    if not ret or frame is None:
+        time.sleep(0.02)
         continue
-    consecutive_drops = 0
 
+    frame_count += 1
     current_time = time.time()
     fps = 0.9 * fps + 0.1 * (1.0 / max(current_time - prev_time, 1e-5))
     prev_time = current_time
 
-    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    small_frame = cv2.resize(rgb_frame, (0, 0), fx=0.25, fy=0.25)
-    face_locations = face_recognition.face_locations(small_frame)
-    face_encodings = face_recognition.face_encodings(small_frame, face_locations)
+    # Run heavy AI processing every Nth frame (reduces CPU load by 67%)
+    if frame_count % PROCESS_EVERY_N_FRAMES == 0:
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        small_frame = cv2.resize(rgb_frame, (0, 0), fx=0.25, fy=0.25)
+        face_locations = face_recognition.face_locations(small_frame, model="hog")
+        face_encodings = face_recognition.face_encodings(small_frame, face_locations)
 
-    for face_encoding, face_location in zip(face_encodings, face_locations):
-        distances = face_recognition.face_distance(known_face_encodings, face_encoding)
-        best_match_index = np.argmin(distances) if len(distances) > 0 else -1
-        match_percent = (1 - distances[best_match_index]) * 100 if best_match_index >= 0 else 0
+        new_cached_faces = []
+        for face_encoding, face_location in zip(face_encodings, face_locations):
+            distances = face_recognition.face_distance(known_face_encodings, face_encoding)
+            best_match_index = np.argmin(distances) if len(distances) > 0 else -1
+            match_percent = (1 - distances[best_match_index]) * 100 if best_match_index >= 0 else 0
 
-        # Face bounding box coordinates on original frame
-        top, right, bottom, left = [v * 4 for v in face_location]
-        top = max(0, top)
-        left = max(0, left)
-        bottom = min(frame.shape[0], bottom)
-        right = min(frame.shape[1], right)
-        face_roi = frame[top:bottom, left:right]
+            # Face bounding box coordinates on original frame
+            top, right, bottom, left = [v * 4 for v in face_location]
+            top = max(0, top)
+            left = max(0, left)
+            bottom = min(frame.shape[0], bottom)
+            right = min(frame.shape[1], right)
+            face_roi = frame[top:bottom, left:right]
 
-        name = "Stranger"
-        age = "-"
-        color = (0, 0, 255)
-
-        if best_match_index >= 0 and match_percent > 60:
-            name = str(known_face_names[best_match_index])
-            age = str(known_face_ages[best_match_index]) if best_match_index < len(known_face_ages) else "-"
-            color = (0, 255, 0)
-
-            # Audio greeting with cooldown
-            if current_time - last_spoken.get(name, 0) > SPEECH_COOLDOWN:
-                last_spoken[name] = current_time
-                if is_principal_office:
-                    speak_async(f"Principal's Office entry logged for {name}")
-                else:
-                    speak_async(f"Hello, {name}")
-        else:
-            # Predict Age & Gender for Stranger / Unknown face
-            if face_roi.size > 0 and (gender_net is not None or age_net is not None):
-                try:
-                    blob = cv2.dnn.blobFromImage(
-                        face_roi, 1.0, (227, 227),
-                        (78.4263377603, 87.7689143744, 114.895847746),
-                        swapRB=False
-                    )
-                    det_gender = ""
-                    det_age = ""
-                    if gender_net is not None:
-                        gender_net.setInput(blob)
-                        g_preds = gender_net.forward()
-                        det_gender = GENDER_LIST[g_preds[0].argmax()]
-
-                    if age_net is not None:
-                        age_net.setInput(blob)
-                        a_preds = age_net.forward()
-                        det_age = AGE_BUCKETS[a_preds[0].argmax()]
-
-                    if det_gender and det_age:
-                        age = f"{det_gender}, {det_age}"
-                    elif det_age:
-                        age = det_age
-                    elif det_gender:
-                        age = det_gender
-                except Exception:
-                    pass
-
-            # Unknown stranger handling with cooldown
-            if current_time - last_unknown_snapshot > UNKNOWN_COOLDOWN:
-                last_unknown_snapshot = current_time
-                timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-                prefix = "principal_intrusion" if is_principal_office else "unknown"
-                snap_path = os.path.join(snapshots_dir, f"{prefix}_{timestamp_str}.jpg")
-                cv2.imwrite(snap_path, frame)
-                cv2.imwrite(os.path.join(snapshots_dir, "latest_unknown.jpg"), frame)
-                if is_principal_office:
-                    speak_async(f"Warning! Restricted area. Unauthorized entry detected!")
-                else:
-                    speak_async("Unknown person detected!")
-
-        # Emotion detection on face ROI
-        emotion_str = "Unknown"
-        detected_emotion_name = "-"
-
-        if face_roi.size > 0:
-            try:
-                gray = cv2.cvtColor(face_roi, cv2.COLOR_BGR2GRAY)
-                roi_resized = cv2.resize(gray, (48, 48))
-                roi_normalized = roi_resized.astype("float32") / 255.0
-                detected_emotion_name, confidence, _ = emotion_classifier.predict(roi_normalized)
-                emotion_str = f"{detected_emotion_name} ({confidence*100:.1f}%)"
-            except Exception:
-                emotion_str = "Unknown"
-
-        if is_principal_office and name == "Stranger":
-            label = f"[RESTRICTED AREA] {name} ({age}) | {emotion_str}"
+            name = "Stranger"
+            age = "-"
             color = (0, 0, 255)
-        else:
-            label = f"{name} ({age}) | {match_percent:.0f}% | {emotion_str}"
+
+            if best_match_index >= 0 and match_percent > 60:
+                name = str(known_face_names[best_match_index])
+                age = str(known_face_ages[best_match_index]) if best_match_index < len(known_face_ages) else "-"
+                color = (0, 255, 0)
+
+                # Audio greeting with cooldown
+                if current_time - last_spoken.get(name, 0) > SPEECH_COOLDOWN:
+                    last_spoken[name] = current_time
+                    if is_principal_office:
+                        speak_async(f"Principal's Office entry logged for {name}")
+                    else:
+                        speak_async(f"Hello, {name}")
+            else:
+                # Predict Age & Gender for Stranger (Cached for 3 seconds per face to avoid CPU spikes)
+                cache_key = f"{left // 80}_{top // 80}"
+                cached_demo = last_demographics.get(cache_key)
+                if cached_demo and (current_time - cached_demo["time"] < 3.0):
+                    age = cached_demo["age"]
+                elif face_roi.size > 0 and (gender_net is not None or age_net is not None):
+                    try:
+                        blob = cv2.dnn.blobFromImage(
+                            face_roi, 1.0, (227, 227),
+                            (78.4263377603, 87.7689143744, 114.895847746),
+                            swapRB=False
+                        )
+                        det_gender = ""
+                        det_age = ""
+                        if gender_net is not None:
+                            gender_net.setInput(blob)
+                            g_preds = gender_net.forward()
+                            det_gender = GENDER_LIST[g_preds[0].argmax()]
+
+                        if age_net is not None:
+                            age_net.setInput(blob)
+                            a_preds = age_net.forward()
+                            det_age = AGE_BUCKETS[a_preds[0].argmax()]
+
+                        if det_gender and det_age:
+                            age = f"{det_gender}, {det_age}"
+                        elif det_age:
+                            age = det_age
+                        elif det_gender:
+                            age = det_gender
+                        last_demographics[cache_key] = {"age": age, "time": current_time}
+                    except Exception:
+                        pass
+
+                # Unknown stranger handling with cooldown
+                if current_time - last_unknown_snapshot > UNKNOWN_COOLDOWN:
+                    last_unknown_snapshot = current_time
+                    timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    prefix = "principal_intrusion" if is_principal_office else "unknown"
+                    snap_path = os.path.join(snapshots_dir, f"{prefix}_{timestamp_str}.jpg")
+                    cv2.imwrite(snap_path, frame)
+                    cv2.imwrite(os.path.join(snapshots_dir, "latest_unknown.jpg"), frame)
+                    if is_principal_office:
+                        speak_async(f"Warning! Restricted area. Unauthorized entry detected!")
+                    else:
+                        speak_async("Unknown person detected!")
+
+            # Emotion detection on face ROI
+            emotion_str = "Unknown"
+            detected_emotion_name = "-"
+
+            if face_roi.size > 0:
+                try:
+                    gray = cv2.cvtColor(face_roi, cv2.COLOR_BGR2GRAY)
+                    roi_resized = cv2.resize(gray, (48, 48))
+                    roi_normalized = roi_resized.astype("float32") / 255.0
+                    detected_emotion_name, confidence, _ = emotion_classifier.predict(roi_normalized)
+                    emotion_str = f"{detected_emotion_name} ({confidence*100:.1f}%)"
+                except Exception:
+                    emotion_str = "Unknown"
+
+            if is_principal_office and name == "Stranger":
+                label = f"[RESTRICTED AREA] {name} ({age}) | {emotion_str}"
+                color = (0, 0, 255)
+            else:
+                label = f"{name} ({age}) | {match_percent:.0f}% | {emotion_str}"
+
+            new_cached_faces.append({
+                "box": (left, top, right, bottom),
+                "color": color,
+                "label": label
+            })
+
+            # Save to CSV with cooldown per person
+            if current_time - last_logged.get(name, 0) > LOG_COOLDOWN:
+                last_logged[name] = current_time
+                with open(log_file, "a", newline="", encoding="utf-8") as f:
+                    writer = csv.writer(f)
+                    writer.writerow([name, age, f"{match_percent:.1f}%", detected_emotion_name, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), cam_name])
+
+        cached_faces = new_cached_faces
+
+    # Render bounding boxes and HUD labels on EVERY frame (silky smooth 30 FPS!)
+    for face in cached_faces:
+        left, top, right, bottom = face["box"]
+        color = face["color"]
+        label = face["label"]
         cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
         cv2.putText(frame, label, (left, max(20, top - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)
-
-        # Save to CSV with cooldown per person
-        if current_time - last_logged.get(name, 0) > LOG_COOLDOWN:
-            last_logged[name] = current_time
-            with open(log_file, "a", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow([name, age, f"{match_percent:.1f}%", detected_emotion_name, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), cam_name])
 
     # Display FPS and active system info
     if not HEADLESS:
@@ -280,5 +361,5 @@ while True:
         # In headless mode, keep CPU usage low
         time.sleep(0.01)
 
-cap.release()
+stream.release()
 cv2.destroyAllWindows()
