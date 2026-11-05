@@ -56,6 +56,14 @@ SOURCE_CCTV = "CCTV / IP Camera"
 SOURCE_FILE = "Video File"
 KIND_SHORT = {SOURCE_WEBCAM: "Webcam", SOURCE_CCTV: "CCTV", SOURCE_FILE: "File"}
 
+CAMERA_MODES = [
+    "Classroom (Indoor / Standard)",
+    "Outdoor / Main Gate (25-35 ft)",
+    "Principal's Office / High Security",
+    "Corridor / Transit Flow",
+    "Library / Exam Hall (Silent)"
+]
+
 VIEW_SINGLE = "Single camera"
 VIEW_GRID = "Grid (all cameras)"
 
@@ -66,7 +74,8 @@ BG_BGR = (22, 13, 9)           # studio obsidian video background (#090d16) in B
 # Helpers
 # --------------------------------------------------------------------------
 def default_camera():
-    return {"id": uuid.uuid4().hex[:8], "name": "Webcam 0", "kind": SOURCE_WEBCAM, "source": 0}
+    return {"id": uuid.uuid4().hex[:8], "name": "Webcam 0", "kind": SOURCE_WEBCAM, "source": 0,
+            "room": "Classroom 1", "mode": CAMERA_MODES[0]}
 
 
 def load_config():
