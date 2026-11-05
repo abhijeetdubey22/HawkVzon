@@ -22,6 +22,10 @@ gui_config.json
 data/school_settings.json
 data/alerts_state.json
 
+# Encryption keys (NEVER commit decryption keys)
+*.key
+data/face.key
+
 # Local logs and CSV export dumps
 logs/
 exports/
