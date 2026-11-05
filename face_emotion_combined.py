@@ -120,6 +120,7 @@ class ThreadedStream:
         self.cap = None
         self.frame = None
         self.ret = False
+        self.seq = 0
         self.lock = threading.Lock()
         self.running = True
         self.last_grab = time.time()
@@ -152,7 +153,16 @@ class ThreadedStream:
         while self.running:
             if self.cap is None or not self.cap.isOpened():
                 time.sleep(1.0)
+                if not self.running:
+                    break
                 self._open()
+                if not self.running:
+                    if self.cap is not None:
+                        try:
+                            self.cap.release()
+                        except Exception:
+                            pass
+                    break
                 continue
             ret, frame = self.cap.read()
             if ret and frame is not None:
@@ -160,6 +170,7 @@ class ThreadedStream:
                 with self.lock:
                     self.ret = ret
                     self.frame = frame
+                    self.seq += 1
                     self.last_grab = time.time()
             else:
                 drops += 1
@@ -170,6 +181,8 @@ class ThreadedStream:
                     except Exception:
                         pass
                     time.sleep(1.5)
+                    if not self.running:
+                        break
                     self._open()
                     drops = 0
                 else:
@@ -178,15 +191,18 @@ class ThreadedStream:
     def read(self):
         with self.lock:
             if not self.ret or self.frame is None:
-                return False, None
+                return False, None, 0
             # Do not return frames older than 4 seconds
             if time.time() - self.last_grab > 4.0:
-                return False, None
-            return True, self.frame.copy()
+                return False, None, 0
+            return True, self.frame.copy(), self.seq
 
     def release(self):
         self.running = False
-        if self.cap is not None:
+        if hasattr(self, "thread") and self.thread.is_alive():
+            self.thread.join(timeout=3.0)
+        worker_stopped = not (hasattr(self, "thread") and self.thread.is_alive())
+        if worker_stopped and self.cap is not None:
             try:
                 self.cap.release()
             except Exception:
@@ -203,28 +219,47 @@ fps = 0.0
 cached_faces = []
 last_demographics = {}
 frame_count = 0
-PROCESS_EVERY_N_FRAMES = 3  # High-speed interleaving: runs AI on every 3rd frame, renders at 30 FPS
+PROCESS_EVERY_N_FRAMES = 3  # High-speed interleaving: runs AI on every 3rd new frame, renders at 30 FPS
 
-# Wait up to 5 seconds for first valid frame
+# Wait up to 5 seconds for first valid frame; exit if stream is dead/unavailable
+has_initial_frame = False
 for _ in range(50):
-    ret, frame = stream.read()
+    ret, frame, seq = stream.read()
     if ret and frame is not None:
+        has_initial_frame = True
         break
     time.sleep(0.1)
 
+if not has_initial_frame:
+    print(f"❌ Error: Camera '{cam_name}' failed to supply a video frame within startup deadline. Check connection/URL.")
+    stream.release()
+    sys.exit(1)
+
+last_processed_seq = -1
+
 while True:
-    ret, frame = stream.read()
+    ret, frame, seq = stream.read()
     if not ret or frame is None:
-        time.sleep(0.02)
+        if not HEADLESS:
+            if cv2.waitKey(20) & 0xFF == ord('q'):
+                break
+        else:
+            time.sleep(0.02)
         continue
 
-    frame_count += 1
-    current_time = time.time()
-    fps = 0.9 * fps + 0.1 * (1.0 / max(current_time - prev_time, 1e-5))
-    prev_time = current_time
+    is_new_frame = (seq != last_processed_seq)
+    if not is_new_frame:
+        time.sleep(0.005)
 
-    # Run heavy AI processing every Nth frame (reduces CPU load by 67%)
-    if frame_count % PROCESS_EVERY_N_FRAMES == 0:
+    if is_new_frame:
+        last_processed_seq = seq
+        frame_count += 1
+        current_time = time.time()
+        fps = 0.9 * fps + 0.1 * (1.0 / max(current_time - prev_time, 1e-5))
+        prev_time = current_time
+
+    # Run heavy AI processing only on every Nth new captured frame (reduces CPU load by 67%)
+    if is_new_frame and (frame_count % PROCESS_EVERY_N_FRAMES == 0):
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         small_frame = cv2.resize(rgb_frame, (0, 0), fx=0.25, fy=0.25)
         face_locations = face_recognition.face_locations(small_frame, model="hog")
