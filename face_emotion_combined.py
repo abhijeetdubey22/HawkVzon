@@ -140,7 +140,20 @@ def load_known_faces(faces_dir):
                 ages = list(np.load(flat_age, allow_pickle=True)) if os.path.exists(flat_age) else ["-"] * len(names)
             except Exception:
                 pass
-    return np.array(encs, dtype=object), np.array(names, dtype=object), np.array(ages, dtype=object)
+    valid_encs, valid_names, valid_ages = [], [], []
+    for e, n, a in zip(encs, names, ages):
+        try:
+            arr = np.asarray(e, dtype=np.float64).ravel()
+            if arr.shape == (128,):
+                valid_encs.append(arr)
+                valid_names.append(n)
+                valid_ages.append(a)
+        except Exception:
+            continue
+
+    if valid_encs:
+        return np.array(valid_encs, dtype=np.float64), np.array(valid_names), np.array(valid_ages)
+    return np.empty((0, 128), dtype=np.float64), np.array([]), np.array([])
 
 known_face_encodings, known_face_names, known_face_ages = load_known_faces(os.path.join(BASE_DIR, "faces"))
 
@@ -419,9 +432,14 @@ while True:
 
         new_cached_faces = []
         for face_encoding, face_location in zip(face_encodings, full_face_locations):
-            distances = face_recognition.face_distance(known_face_encodings, face_encoding)
-            best_match_index = np.argmin(distances) if len(distances) > 0 else -1
-            match_percent = (1 - distances[best_match_index]) * 100 if best_match_index >= 0 else 0
+            if len(known_face_encodings) > 0:
+                distances = face_recognition.face_distance(known_face_encodings, face_encoding)
+                best_match_index = np.argmin(distances) if len(distances) > 0 else -1
+                match_percent = (1 - distances[best_match_index]) * 100 if best_match_index >= 0 else 0
+            else:
+                distances = np.empty((0,))
+                best_match_index = -1
+                match_percent = 0
 
             # Face bounding box coordinates on original frame
             top, right, bottom, left = face_location
