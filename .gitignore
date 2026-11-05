@@ -29,4 +29,5 @@ exports/
 # Temporary / scratch testing files
 temp_*
 scratch/
+.agents/
 
