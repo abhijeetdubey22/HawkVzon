@@ -610,6 +610,10 @@ class App:
         ttk.Checkbutton(act, text="Show live recognition HUD window",
                         variable=self.show_popup_var,
                         style="Card.TCheckbutton").pack(anchor="w", pady=(8, 0))
+        self.long_range_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(act, text="Outdoor / Long-Range Mode (25+ ft)",
+                        variable=self.long_range_var,
+                        style="Card.TCheckbutton").pack(anchor="w", pady=(4, 0))
         ttk.Button(act, text="Open Logs & Snapshots", style="Secondary.TButton",
                    command=lambda: open_folder(LOGS_DIR)).pack(fill="x", pady=(8, 0))
 
@@ -1186,6 +1190,7 @@ class App:
         env["FACE_CAMERA_ID"] = cid
         env["FACE_CLASS"] = cam.get("room", "")
         env["FACE_HEADLESS"] = "0" if getattr(self, "show_popup_var", None) is None or self.show_popup_var.get() else "1"
+        env["FACE_DETECTION_SCALE"] = "0.65" if getattr(self, "long_range_var", None) and self.long_range_var.get() else "0.50"
         try:
             proc = subprocess.Popen([sys.executable or "python", SCRIPT_PATH],
                                     cwd=BASE_DIR, env=env)

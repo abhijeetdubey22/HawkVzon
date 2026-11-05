@@ -11,6 +11,8 @@ from datetime import datetime
 import threading
 import queue
 import sys
+import json
+import math
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -60,6 +62,19 @@ ages_path = os.path.join(BASE_DIR, "known_face_ages.npy")
 known_face_encodings = np.load(encodings_path, allow_pickle=True)
 known_face_names = np.load(names_path, allow_pickle=True)
 known_face_ages = np.load(ages_path, allow_pickle=True) if os.path.exists(ages_path) else ["-"] * len(known_face_names)
+
+# Load school settings and match threshold
+settings_path = os.path.join(BASE_DIR, "data", "school_settings.json")
+min_match_thresh = 50.0
+if os.path.exists(settings_path):
+    try:
+        with open(settings_path, "r", encoding="utf-8") as sf:
+            s_data = json.load(sf)
+            parsed_thresh = float(s_data.get("min_match", 50.0))
+            if math.isfinite(parsed_thresh) and 1.0 <= parsed_thresh <= 99.0:
+                min_match_thresh = parsed_thresh
+    except Exception:
+        min_match_thresh = 50.0
 
 # Load emotion model
 model_path = os.path.join(BASE_DIR, "emotion_model.hdf5")
@@ -260,30 +275,55 @@ while True:
 
     # Run heavy AI processing only on every Nth new captured frame (reduces CPU load by 67%)
     if is_new_frame and (frame_count % PROCESS_EVERY_N_FRAMES == 0):
+        # Long-range outdoor & indoor detection engine
+        # Detection scale factor: 0.50 retains 4x higher resolution for distant faces up to 25-30 ft
+        # Can be set higher (e.g. 0.65) via FACE_DETECTION_SCALE for outdoor testing
+        try:
+            raw_scale = float(os.environ.get("FACE_DETECTION_SCALE", "0.50"))
+            detection_scale = max(0.1, min(1.0, raw_scale)) if math.isfinite(raw_scale) else 0.50
+        except Exception:
+            detection_scale = 0.50
+        inv_scale = 1.0 / detection_scale
+
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        small_frame = cv2.resize(rgb_frame, (0, 0), fx=0.25, fy=0.25)
-        face_locations = face_recognition.face_locations(small_frame, model="hog")
-        face_encodings = face_recognition.face_encodings(small_frame, face_locations)
+        if detection_scale < 1.0:
+            small_frame = cv2.resize(rgb_frame, (0, 0), fx=detection_scale, fy=detection_scale)
+        else:
+            small_frame = rgb_frame
+
+        # Run face detector with 1-level pyramid upsampling to catch distant small faces (15-30 ft)
+        face_locations_small = face_recognition.face_locations(small_frame, number_of_times_to_upsample=1, model="hog")
+
+        # Map bounding boxes accurately back to full-resolution coordinates
+        full_face_locations = []
+        for loc in face_locations_small:
+            t, r, b, l = loc
+            full_face_locations.append((
+                int(max(0, t * inv_scale)),
+                int(min(rgb_frame.shape[1], r * inv_scale)),
+                int(min(rgb_frame.shape[0], b * inv_scale)),
+                int(max(0, l * inv_scale))
+            ))
+
+        # CRITICAL: Compute 128-D embeddings on the crisp FULL-RESOLUTION frame, NOT the blurry thumbnail!
+        # This dramatically raises recognition accuracy for distant faces and turns red stranger boxes into green student matches
+        face_encodings = face_recognition.face_encodings(rgb_frame, full_face_locations)
 
         new_cached_faces = []
-        for face_encoding, face_location in zip(face_encodings, face_locations):
+        for face_encoding, face_location in zip(face_encodings, full_face_locations):
             distances = face_recognition.face_distance(known_face_encodings, face_encoding)
             best_match_index = np.argmin(distances) if len(distances) > 0 else -1
             match_percent = (1 - distances[best_match_index]) * 100 if best_match_index >= 0 else 0
 
             # Face bounding box coordinates on original frame
-            top, right, bottom, left = [v * 4 for v in face_location]
-            top = max(0, top)
-            left = max(0, left)
-            bottom = min(frame.shape[0], bottom)
-            right = min(frame.shape[1], right)
+            top, right, bottom, left = face_location
             face_roi = frame[top:bottom, left:right]
 
             name = "Stranger"
             age = "-"
             color = (0, 0, 255)
 
-            if best_match_index >= 0 and match_percent > 60:
+            if best_match_index >= 0 and match_percent >= min_match_thresh:
                 name = str(known_face_names[best_match_index])
                 age = str(known_face_ages[best_match_index]) if best_match_index < len(known_face_ages) else "-"
                 color = (0, 255, 0)
