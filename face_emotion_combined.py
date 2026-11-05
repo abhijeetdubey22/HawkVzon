@@ -221,6 +221,10 @@ is_outdoor_mode = ("outdoor" in cam_mode.lower() or "gate" in cam_mode.lower())
 
 window_title = f"Face & Emotion Recognition - {cam_name} [{cam_mode.split(' ')[0]}]"
 HEADLESS = os.environ.get("FACE_HEADLESS", "0") == "1" or "--headless" in sys.argv
+try:
+    zoom_factor = max(1.0, min(4.0, float(os.environ.get("FACE_ZOOM", "1.0"))))
+except (ValueError, TypeError):
+    zoom_factor = 1.0
 
 class ThreadedStream:
     """High-performance threaded stream reader. Always discards queued frames to eliminate RTSP lag."""
@@ -356,6 +360,15 @@ while True:
         else:
             time.sleep(0.02)
         continue
+
+    # Apply digital zoom crop if configured
+    if zoom_factor > 1.0:
+        zh, zw = frame.shape[:2]
+        cw, ch = int(zw / zoom_factor), int(zh / zoom_factor)
+        cx, cy = zw // 2, zh // 2
+        x1 = max(0, min(zw - cw, cx - cw // 2))
+        y1 = max(0, min(zh - ch, cy - ch // 2))
+        frame = cv2.resize(frame[y1:y1 + ch, x1:x1 + cw], (zw, zh), interpolation=cv2.INTER_LINEAR)
 
     is_new_frame = (seq != last_processed_seq)
     if not is_new_frame:
@@ -524,10 +537,13 @@ while True:
         cv2.putText(frame, label, (left, y_pos), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 4)
         cv2.putText(frame, label, (left, y_pos), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)
 
-    # Display FPS and active system info (with high-contrast shadow)
+    # Display FPS, Zoom, and active system info (with high-contrast shadow)
     if not HEADLESS:
-        cv2.putText(frame, f"FPS: {fps:.1f}", (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 4)
-        cv2.putText(frame, f"FPS: {fps:.1f}", (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+        hud_info = f"FPS: {fps:.1f}"
+        if zoom_factor > 1.0:
+            hud_info += f" | Zoom: {zoom_factor:.1f}x"
+        cv2.putText(frame, hud_info, (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 4)
+        cv2.putText(frame, hud_info, (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
         cv2.imshow(window_title, frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break

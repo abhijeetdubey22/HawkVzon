@@ -345,7 +345,7 @@ def _map_cameras(cfg, fn):
 # --------------------------------------------------------------------------
 def default_camera():
     return {"id": uuid.uuid4().hex[:8], "name": "Webcam 0", "kind": SOURCE_WEBCAM, "source": 0,
-            "room": "Classroom 1", "mode": CAMERA_MODES[0]}
+            "room": "Classroom 1", "mode": CAMERA_MODES[0], "zoom": 1.0}
 
 
 def load_config():
@@ -592,6 +592,13 @@ class CameraDialog(tk.Toplevel):
         ttk.Combobox(pad, textvariable=self.mode_var, state="readonly",
                      values=CAMERA_MODES).pack(fill="x", pady=(2, 10))
 
+        ttk.Label(pad, text="Camera Digital Zoom", style="Card.TLabel").pack(anchor="w")
+        z_init = cam.get("zoom", 1.0) if cam else 1.0
+        z_str = f"{float(z_init):.1f}x"
+        self.zoom_var = tk.StringVar(value=z_str)
+        ttk.Combobox(pad, textvariable=self.zoom_var, state="readonly",
+                     values=["1.0x", "1.25x", "1.5x", "1.75x", "2.0x", "2.5x", "3.0x"]).pack(fill="x", pady=(2, 10))
+
         ttk.Label(pad, text="Source type", style="Card.TLabel").pack(anchor="w")
         self.kind_var = tk.StringVar(value=cam["kind"] if cam else SOURCE_CCTV)
         combo = ttk.Combobox(pad, textvariable=self.kind_var, state="readonly",
@@ -674,9 +681,15 @@ class CameraDialog(tk.Toplevel):
         if err:
             messagebox.showwarning("Invalid source", err, parent=self)
             return
+        z_raw = self.zoom_var.get().split(" ")[0].replace("x", "")
+        try:
+            zoom_val = float(z_raw)
+        except ValueError:
+            zoom_val = 1.0
         self.result = {"name": name, "kind": kind, "source": source,
                        "room": self.room_var.get().strip(),
-                       "mode": self.mode_var.get().strip()}
+                       "mode": self.mode_var.get().strip(),
+                       "zoom": zoom_val}
         self.destroy()
 
 
@@ -819,6 +832,7 @@ class App:
         self.last_rec_ui = None
         self.error_popup_shown = False
         self.last_log_rows = []
+        self.camera_zooms = {c["id"]: float(c.get("zoom", 1.0)) for c in self.cameras}
 
         # rendering cache (speed)
         self._last_render = 0.0
@@ -948,10 +962,27 @@ class App:
 
         self.view_var = tk.StringVar(value=self.view_mode)
         view_combo = ttk.Combobox(toolbar, textvariable=self.view_var, state="readonly",
-                                  width=20, values=[VIEW_SINGLE, VIEW_GRID])
+                                  width=16, values=[VIEW_SINGLE, VIEW_GRID])
         view_combo.pack(side="right")
         view_combo.bind("<<ComboboxSelected>>", lambda e: self._on_view_change())
         ttk.Label(toolbar, text="View:", style="Card.TLabel").pack(side="right", padx=(0, 6))
+
+        # Digital Zoom toolbar control
+        zoom_frame = ttk.Frame(toolbar, style="Inner.TFrame")
+        zoom_frame.pack(side="right", padx=(0, 14))
+        ttk.Label(zoom_frame, text="🔍 Zoom:", style="Card.TLabel").pack(side="left", padx=(0, 4))
+        cur_z = self.get_zoom(self.selected_id)
+        self.zoom_var = tk.StringVar(value=f"{cur_z:.1f}x")
+        self.zoom_combo = ttk.Combobox(zoom_frame, textvariable=self.zoom_var, state="readonly",
+                                       width=6, values=["1.0x", "1.25x", "1.5x", "1.75x", "2.0x", "2.5x", "3.0x"])
+        self.zoom_combo.pack(side="left")
+        self.zoom_combo.bind("<<ComboboxSelected>>", lambda e: self._on_zoom_change())
+        ttk.Button(zoom_frame, text="−", width=2, style="Secondary.TButton",
+                   command=self._zoom_out).pack(side="left", padx=(3, 1))
+        ttk.Button(zoom_frame, text="+", width=2, style="Secondary.TButton",
+                   command=self._zoom_in).pack(side="left", padx=(0, 3))
+        ttk.Button(zoom_frame, text="1x", width=2, style="Secondary.TButton",
+                   command=self._zoom_reset).pack(side="left")
 
         self.video_box = tk.Frame(video_body, bg=C["video"], height=340)
         self.video_box.pack(fill="both", expand=True)
@@ -960,6 +991,10 @@ class App:
                                     font=("Segoe UI", 12), text="")
         self.video_label.pack(fill="both", expand=True)
         self.video_label.bind("<Button-1>", self._on_video_click)
+        self.video_label.bind("<Double-Button-1>", self._on_video_double_click)
+        self.video_label.bind("<MouseWheel>", self._on_mouse_wheel)
+        self.video_label.bind("<Button-4>", lambda e: self._zoom_in())
+        self.video_label.bind("<Button-5>", lambda e: self._zoom_out())
 
         # ---------------- Right column ----------------
         right_scroll = ScrollFrame(body, width=390)
@@ -972,11 +1007,11 @@ class App:
 
         tree_wrap = ttk.Frame(cam_body, style="Inner.TFrame")
         tree_wrap.pack(fill="x")
-        self.cam_tree = ttk.Treeview(tree_wrap, columns=("name", "room", "mode", "type", "status"),
+        self.cam_tree = ttk.Treeview(tree_wrap, columns=("name", "room", "mode", "zoom", "type", "status"),
                                      show="headings", height=4, selectmode="browse")
-        for col, text, w, anchor in (("name", "Name", 95, "w"), ("room", "Class", 70, "center"),
-                                     ("mode", "Mode", 80, "center"), ("type", "Type", 55, "center"),
-                                     ("status", "Status", 75, "center")):
+        for col, text, w, anchor in (("name", "Name", 90, "w"), ("room", "Class", 65, "center"),
+                                     ("mode", "Mode", 75, "center"), ("zoom", "Zoom", 45, "center"),
+                                     ("type", "Type", 50, "center"), ("status", "Status", 70, "center")):
             self.cam_tree.heading(col, text=text)
             self.cam_tree.column(col, width=w, anchor=anchor)
         cam_sb = ttk.Scrollbar(tree_wrap, orient="vertical", command=self.cam_tree.yview)
@@ -1091,6 +1126,79 @@ class App:
     def set_status(self, text):
         self.status_text.config(text=text)
 
+    def get_zoom(self, cid):
+        if hasattr(self, "camera_zooms") and cid in self.camera_zooms:
+            return self.camera_zooms[cid]
+        c = self.cam(cid)
+        if c:
+            z = float(c.get("zoom", 1.0))
+            if not hasattr(self, "camera_zooms"):
+                self.camera_zooms = {}
+            self.camera_zooms[cid] = z
+            return z
+        return 1.0
+
+    def set_zoom(self, cid, val):
+        val = max(1.0, min(4.0, round(float(val), 2)))
+        if not hasattr(self, "camera_zooms"):
+            self.camera_zooms = {}
+        self.camera_zooms[cid] = val
+        c = self.cam(cid)
+        if c:
+            c["zoom"] = val
+            self._save()
+            if hasattr(self, "cam_tree") and self.cam_tree.exists(cid):
+                vals = list(self.cam_tree.item(cid, "values"))
+                if len(vals) >= 6:
+                    vals[3] = f"{val:.1f}x"
+                    self.cam_tree.item(cid, values=vals)
+        if hasattr(self, "zoom_var") and cid == self.selected_id:
+            txt = f"{val:.1f}x" if val.is_integer() or (val*10)%1==0 else f"{val:.2f}x"
+            self.zoom_var.set(txt)
+        self.last_sig = None
+        cname = c["name"] if c else "camera"
+        self.set_status(f"Zoom set to {val:.2f}x for {cname}")
+
+    def _on_zoom_change(self):
+        if not self.selected_id:
+            return
+        z_str = self.zoom_var.get().split(" ")[0].replace("x", "")
+        try:
+            val = float(z_str)
+            self.set_zoom(self.selected_id, val)
+        except ValueError:
+            pass
+
+    def _zoom_in(self):
+        if not self.selected_id:
+            return
+        curr = self.get_zoom(self.selected_id)
+        self.set_zoom(self.selected_id, curr + 0.25)
+
+    def _zoom_out(self):
+        if not self.selected_id:
+            return
+        curr = self.get_zoom(self.selected_id)
+        self.set_zoom(self.selected_id, curr - 0.25)
+
+    def _zoom_reset(self):
+        if not self.selected_id:
+            return
+        self.set_zoom(self.selected_id, 1.0)
+
+    def _on_mouse_wheel(self, event):
+        if not self.previewing or not self.selected_id:
+            return
+        if getattr(event, "delta", 0) > 0:
+            self._zoom_in()
+        else:
+            self._zoom_out()
+
+    def _on_video_double_click(self, event):
+        if not self.previewing or not self.selected_id:
+            return
+        self._zoom_reset()
+
     def cam(self, cid):
         for c in self.cameras:
             if c["id"] == cid:
@@ -1116,13 +1224,16 @@ class App:
         for c in self.cameras:
             m_full = c.get("mode") or "Classroom"
             m_short = m_full.split(" ")[0] if "(" in m_full else m_full
+            z_txt = f"{self.get_zoom(c['id']):.1f}x"
             self.cam_tree.insert("", "end", iid=c["id"],
-                                 values=(c["name"], c.get("room") or "-", m_short, KIND_SHORT[c["kind"]], "Idle"),
+                                 values=(c["name"], c.get("room") or "-", m_short, z_txt, KIND_SHORT[c["kind"]], "Idle"),
                                  tags=("idle",))
         self.last_cam_status = {}
         if self.selected_id and self.cam_tree.exists(self.selected_id):
             self.cam_tree.selection_set(self.selected_id)
             self.cam_tree.see(self.selected_id)
+            if hasattr(self, "zoom_var"):
+                self.zoom_var.set(f"{self.get_zoom(self.selected_id):.1f}x")
         self._update_buttons()
 
     def _on_select(self, _event=None):
@@ -1130,6 +1241,8 @@ class App:
         if not sel:
             return
         self.selected_id = sel[0]
+        if hasattr(self, "zoom_var"):
+            self.zoom_var.set(f"{self.get_zoom(self.selected_id):.1f}x")
         self._save()
         self._sync_streams()
         self._update_buttons()
@@ -1324,6 +1437,15 @@ class App:
         if s is not None:
             _, frame = s.read(copy=False)
         if frame is not None:
+            zoom = self.get_zoom(cid)
+            if zoom > 1.0:
+                fh, fw = frame.shape[:2]
+                cw, ch = int(fw / zoom), int(fh / zoom)
+                cx, cy = fw // 2, fh // 2
+                x1 = max(0, min(fw - cw, cx - cw // 2))
+                y1 = max(0, min(fh - ch, cy - ch // 2))
+                frame = frame[y1:y1 + ch, x1:x1 + cw]
+
             h, w = frame.shape[:2]
             sc = min(tw / w, th / h)
             nw, nh = max(1, int(w * sc)), max(1, int(h * sc))
@@ -1332,6 +1454,8 @@ class App:
             ox, oy = (tw - nw) // 2, (th - nh) // 2
             tile[oy:oy + nh, ox:ox + nw] = small
             stamp = f"{cam['name']}   {datetime.now():%H:%M:%S}"
+            if zoom > 1.0:
+                stamp += f"  [{zoom:.1f}x]"
             cv2.putText(tile, stamp, (9, 19), cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 0, 0), 3, cv2.LINE_AA)
             cv2.putText(tile, stamp, (8, 18), cv2.FONT_HERSHEY_SIMPLEX, scale, (255, 255, 255), 1, cv2.LINE_AA)
         else:
@@ -1371,7 +1495,7 @@ class App:
         bw = max(self.video_box.winfo_width(), 200)
         bh = max(self.video_box.winfo_height(), 150)
         sig = (bw, bh, self.view_mode, self.selected_id,
-               tuple((c["id"], c["name"]) for c in cams),
+               tuple((c["id"], c["name"], self.get_zoom(c["id"])) for c in cams),
                tuple((cid, s.frame_id, s.state) for cid, s in self.streams.items()),
                tuple(sorted(self.errors)),
                tuple(sorted(c for c in self.procs if self.rec_running(c))))
@@ -1524,6 +1648,15 @@ class App:
             messagebox.showinfo("No video", "No frame received yet. Try again in a moment.")
             return
 
+        zoom = self.get_zoom(self.selected_id)
+        if zoom > 1.0:
+            zh, zw = frame.shape[:2]
+            cw, ch = int(zw / zoom), int(zh / zoom)
+            cx, cy = zw // 2, zh // 2
+            x1 = max(0, min(zw - cw, cx - cw // 2))
+            y1 = max(0, min(zh - ch, cy - ch // 2))
+            frame = cv2.resize(frame[y1:y1 + ch, x1:x1 + cw], (zw, zh), interpolation=cv2.INTER_LINEAR)
+
         target = face_path(name, age)                      # encrypted .face file
         if os.path.exists(target) and not messagebox.askyesno(
                 "Already registered", f"'{name}' ({age}) already exists.\nReplace it?"):
@@ -1634,6 +1767,7 @@ class App:
                 mode = "Classroom (Indoor / Standard)"
         env["FACE_CAMERA_MODE"] = mode
         env["FACE_HEADLESS"] = "0" if getattr(self, "show_popup_var", None) is None or self.show_popup_var.get() else "1"
+        env["FACE_ZOOM"] = f"{self.get_zoom(cid):.2f}"
         if "outdoor" in mode.lower() or "gate" in mode.lower() or (getattr(self, "long_range_var", None) and self.long_range_var.get()):
             env["FACE_DETECTION_SCALE"] = "0.70"
         else:

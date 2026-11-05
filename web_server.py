@@ -91,6 +91,7 @@ class VisionWorker:
                         self.source = int(src) if str(src).isdigit() else src
                         self.camera_name = target.get("name", "Camera")
                         self.camera_mode = target.get("mode", "Classroom (Indoor / Standard)")
+                        self.zoom = float(target.get("zoom", 1.0))
             except Exception:
                 pass
 
@@ -169,6 +170,16 @@ class VisionWorker:
             consecutive_failures = 0
             with telemetry_lock:
                 latest_telemetry["status"] = "Live"
+            
+            # Apply digital zoom crop
+            if getattr(self, "zoom", 1.0) > 1.0:
+                zh, zw = frame.shape[:2]
+                cw, ch = int(zw / self.zoom), int(zh / self.zoom)
+                cx, cy = zw // 2, zh // 2
+                x1 = max(0, min(zw - cw, cx - cw // 2))
+                y1 = max(0, min(zh - ch, cy - ch // 2))
+                frame = cv2.resize(frame[y1:y1 + ch, x1:x1 + cw], (zw, zh), interpolation=cv2.INTER_LINEAR)
+
             frame_idx += 1
             now = time.time()
             fps = 0.9 * fps + 0.1 * (1.0 / max(now - prev_time, 1e-5))
