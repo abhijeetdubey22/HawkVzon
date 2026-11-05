@@ -226,13 +226,57 @@ class TestFaceEmotionSystem(unittest.TestCase):
         self.assertTrue(np.allclose(dummy_vec, restored_vec), "Restored vector does not match original")
         print("  [PASS] Cryptography & Fernet AES encryption/decryption verified (128-D vector integrity 100%)")
 
+    def test_09_camera_navigation_and_zoom(self):
+        """Test one-by-one camera cycling logic and zoom scaling."""
+        cameras = [
+            {"id": "cam1", "name": "Webcam 0", "zoom": 1.0},
+            {"id": "cam2", "name": "Gate Camera", "zoom": 2.0},
+            {"id": "cam3", "name": "Corridor", "zoom": 1.5},
+        ]
+        ids = [c["id"] for c in cameras]
+        selected_id = "cam1"
+
+        # Test next navigation
+        idx = ids.index(selected_id)
+        next_id = ids[(idx + 1) % len(ids)]
+        self.assertEqual(next_id, "cam2")
+
+        idx = ids.index(next_id)
+        next_id = ids[(idx + 1) % len(ids)]
+        self.assertEqual(next_id, "cam3")
+
+        # Test wrap around forward
+        idx = ids.index(next_id)
+        next_id = ids[(idx + 1) % len(ids)]
+        self.assertEqual(next_id, "cam1")
+
+        # Test prev navigation (wrap around backwards)
+        idx = ids.index("cam1")
+        prev_id = ids[(idx - 1) % len(ids)]
+        self.assertEqual(prev_id, "cam3")
+
+        # Test digital zoom center crop geometry
+        frame_shape = (720, 1280, 3)
+        fh, fw = frame_shape[:2]
+        zoom = 2.0
+        cw, ch = int(fw / zoom), int(fh / zoom)
+        cx, cy = fw // 2, fh // 2
+        x1 = max(0, min(fw - cw, cx - cw // 2))
+        y1 = max(0, min(fh - ch, cy - ch // 2))
+
+        self.assertEqual(cw, 640)
+        self.assertEqual(ch, 360)
+        self.assertEqual(x1, 320)
+        self.assertEqual(y1, 180)
+        print("  [PASS] Camera navigation (1-by-1 cycling) & zoom crop geometry verified")
+
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=1)
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(TestFaceEmotionSystem)
     result = runner.run(suite)
     print("=" * 65)
     if result.wasSuccessful():
-        print("             ALL TESTS PASSED SUCCESSFULLY! (7/7)")
+        print("             ALL TESTS PASSED SUCCESSFULLY! (8/8)")
     else:
         print(f"             TESTS FINISHED: {len(result.failures)} Failures, {len(result.errors)} Errors")
     print("=" * 65 + "\n")

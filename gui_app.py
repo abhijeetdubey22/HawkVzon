@@ -834,6 +834,14 @@ class App:
         self.last_log_rows = []
         self.camera_zooms = {c["id"]: float(c.get("zoom", 1.0)) for c in self.cameras}
 
+        # Fullscreen viewer state
+        self.fs_window = None
+        self._fs_photo = None
+        self.fs_video_label = None
+        self.fs_title_label = None
+        self.fs_zoom_label = None
+        self.fs_pill_label = None
+
         # rendering cache (speed)
         self._last_render = 0.0
         self._photo = None
@@ -860,6 +868,12 @@ class App:
         self._tick()
         self._poll_logs()
         root.protocol("WM_DELETE_WINDOW", self.on_close)
+
+        # Global hotkeys for camera navigation & fullscreen
+        root.bind("<F11>", lambda e: self.toggle_fullscreen())
+        root.bind("<Left>", lambda e: self._on_arrow_key("left", e))
+        root.bind("<Right>", lambda e: self._on_arrow_key("right", e))
+        root.bind("<Button-2>", lambda e: self._zoom_reset())
 
     # ------------------------------------------------------------------ style
     def _setup_style(self):
@@ -959,6 +973,17 @@ class App:
                                         style="Danger.TButton", command=self.stop_preview)
         self.btn_prev_stop.pack(side="left", padx=(8, 0))
         self.btn_prev_stop.state(["disabled"])
+
+        # Quick 1-by-1 Camera Navigation
+        ttk.Button(toolbar, text="◀ Prev", style="Secondary.TButton",
+                   command=self._select_prev_cam).pack(side="left", padx=(10, 2))
+        ttk.Button(toolbar, text="Next ▶", style="Secondary.TButton",
+                   command=self._select_next_cam).pack(side="left", padx=(0, 8))
+
+        # Full Screen Toggle Button
+        self.btn_fullscreen = ttk.Button(toolbar, text="⛶  Full Screen (F11)",
+                                         style="Primary.TButton", command=self.toggle_fullscreen)
+        self.btn_fullscreen.pack(side="left")
 
         self.view_var = tk.StringVar(value=self.view_mode)
         view_combo = ttk.Combobox(toolbar, textvariable=self.view_var, state="readonly",
@@ -1194,10 +1219,227 @@ class App:
         else:
             self._zoom_out()
 
-    def _on_video_double_click(self, event):
-        if not self.previewing or not self.selected_id:
+    def _on_arrow_key(self, direction, event=None):
+        try:
+            focused = self.root.focus_get()
+            if isinstance(focused, (tk.Entry, ttk.Entry, tk.Text, ttk.Combobox)):
+                return
+        except Exception:
+            pass
+        if direction == "left":
+            self._select_prev_cam()
+        else:
+            self._select_next_cam()
+
+    def _select_cam_by_id(self, cid):
+        if not cid or not self.cameras:
             return
-        self._zoom_reset()
+        self.selected_id = cid
+        if hasattr(self, "cam_tree") and self.cam_tree.exists(cid):
+            self.cam_tree.selection_set(cid)
+            self.cam_tree.see(cid)
+        if hasattr(self, "zoom_var"):
+            self.zoom_var.set(f"{self.get_zoom(self.selected_id):.1f}x")
+        self._save()
+        self._sync_streams()
+        self._update_buttons()
+        self._update_fs_hud()
+        self.last_sig = None
+        cam = self.selected_cam()
+        if cam:
+            ids = [c["id"] for c in self.cameras]
+            idx = ids.index(cid) + 1 if cid in ids else 1
+            self.set_status(f"Inspecting Camera [{idx}/{len(self.cameras)}]: {cam['name']} ({cam.get('room', '-')})")
+
+    def _select_prev_cam(self, event=None):
+        if not self.cameras:
+            return
+        ids = [c["id"] for c in self.cameras]
+        try:
+            idx = ids.index(self.selected_id)
+        except ValueError:
+            idx = 0
+        new_idx = (idx - 1) % len(ids)
+        self._select_cam_by_id(ids[new_idx])
+
+    def _select_next_cam(self, event=None):
+        if not self.cameras:
+            return
+        ids = [c["id"] for c in self.cameras]
+        try:
+            idx = ids.index(self.selected_id)
+        except ValueError:
+            idx = 0
+        new_idx = (idx + 1) % len(ids)
+        self._select_cam_by_id(ids[new_idx])
+
+    def _on_video_double_click(self, event):
+        if not self.cameras:
+            return
+        if self.view_mode == VIEW_GRID and self.layout and self.previewing:
+            cols, rows, tw, th, gap, ids = self.layout
+            c = event.x // (tw + gap)
+            r = event.y // (th + gap)
+            idx = r * cols + c
+            if 0 <= c < cols and 0 <= r < rows and idx < len(ids):
+                self._select_cam_by_id(ids[idx])
+        self.toggle_fullscreen()
+
+    def toggle_fullscreen(self, event=None):
+        if self.fs_window is not None and self.fs_window.winfo_exists():
+            self.close_fullscreen()
+        else:
+            self.open_fullscreen()
+
+    def open_fullscreen(self):
+        if not self.cameras:
+            messagebox.showinfo("No Camera", "Please add at least one camera.")
+            return
+
+        if self.fs_window is not None and self.fs_window.winfo_exists():
+            self.fs_window.lift()
+            return
+
+        # Auto-start preview if not already running
+        if not self.previewing:
+            self.start_preview()
+
+        self.fs_window = tk.Toplevel(self.root)
+        self.fs_window.title("Camera Full Screen Inspection")
+        self.fs_window.attributes("-fullscreen", True)
+        self.fs_window.configure(bg="#000000")
+
+        # Top OSD Navigation & Control Bar
+        osd = tk.Frame(self.fs_window, bg="#0b1329", height=54)
+        osd.pack(fill="x", side="top")
+        osd.pack_propagate(False)
+
+        # Left: Prev Camera
+        btn_prev = tk.Button(osd, text="◀  Prev (←)", bg="#1e293b", fg="#f8fafc",
+                             activebackground="#334155", activeforeground="#ffffff",
+                             font=("Segoe UI", 10, "bold"), relief="flat", padx=12, pady=4,
+                             cursor="hand2", command=self._select_prev_cam)
+        btn_prev.pack(side="left", padx=(10, 4), pady=8)
+
+        btn_next = tk.Button(osd, text="Next (→)  ▶", bg="#1e293b", fg="#f8fafc",
+                             activebackground="#334155", activeforeground="#ffffff",
+                             font=("Segoe UI", 10, "bold"), relief="flat", padx=12, pady=4,
+                             cursor="hand2", command=self._select_next_cam)
+        btn_next.pack(side="left", padx=4, pady=8)
+
+        # Status Pill in Full Screen
+        self.fs_pill_label = tk.Label(osd, text="● LIVE", bg="#064e3b", fg="#34d399",
+                                      font=("Segoe UI", 9, "bold"), padx=10, pady=3)
+        self.fs_pill_label.pack(side="left", padx=10, pady=10)
+
+        # Center Title & Camera Info
+        self.fs_title_label = tk.Label(osd, text="", bg="#0b1329", fg="#ffffff",
+                                       font=("Segoe UI", 11, "bold"), anchor="w")
+        self.fs_title_label.pack(side="left", padx=12, fill="x", expand=True)
+
+        # Zoom Controls in Full Screen
+        zf = tk.Frame(osd, bg="#0b1329")
+        zf.pack(side="left", padx=14)
+        tk.Label(zf, text="🔍 Zoom:", bg="#0b1329", fg="#94a3b8", font=("Segoe UI", 9)).pack(side="left", padx=(0, 4))
+        tk.Button(zf, text="−", bg="#1e293b", fg="#ffffff", activebackground="#334155",
+                  font=("Segoe UI", 9, "bold"), width=3, relief="flat", cursor="hand2",
+                  command=self._zoom_out).pack(side="left", padx=2)
+        cur_z = self.get_zoom(self.selected_id)
+        self.fs_zoom_label = tk.Label(zf, text=f"{cur_z:.1f}x", bg="#1e293b", fg="#38bdf8",
+                                      font=("Segoe UI", 9, "bold"), width=5)
+        self.fs_zoom_label.pack(side="left", padx=2)
+        tk.Button(zf, text="+", bg="#1e293b", fg="#ffffff", activebackground="#334155",
+                  font=("Segoe UI", 9, "bold"), width=3, relief="flat", cursor="hand2",
+                  command=self._zoom_in).pack(side="left", padx=2)
+        tk.Button(zf, text="1x", bg="#1e293b", fg="#94a3b8", activebackground="#334155",
+                  font=("Segoe UI", 9), width=3, relief="flat", cursor="hand2",
+                  command=self._zoom_reset).pack(side="left", padx=2)
+
+        # Exit Fullscreen button
+        btn_exit = tk.Button(osd, text="✖  Exit Full Screen (Esc)", bg="#dc2626", fg="#ffffff",
+                             activebackground="#ef4444", activeforeground="#ffffff",
+                             font=("Segoe UI", 10, "bold"), relief="flat", padx=14, pady=4,
+                             cursor="hand2", command=self.close_fullscreen)
+        btn_exit.pack(side="right", padx=10, pady=8)
+
+        # Main video container
+        self.fs_video_label = tk.Label(self.fs_window, bg="#000000", text="Loading Camera Feed...",
+                                       fg="#64748b", font=("Segoe UI", 14))
+        self.fs_video_label.pack(fill="both", expand=True)
+
+        # Fullscreen bindings
+        for widget in (self.fs_window, self.fs_video_label, osd):
+            widget.bind("<Escape>", lambda e: self.close_fullscreen())
+            widget.bind("<F11>", lambda e: self.close_fullscreen())
+            widget.bind("<Left>", lambda e: self._select_prev_cam())
+            widget.bind("<Right>", lambda e: self._select_next_cam())
+            widget.bind("<Up>", lambda e: self._zoom_in())
+            widget.bind("<Down>", lambda e: self._zoom_out())
+            widget.bind("<MouseWheel>", self._on_mouse_wheel)
+            widget.bind("<Button-4>", lambda e: self._zoom_in())
+            widget.bind("<Button-5>", lambda e: self._zoom_out())
+            widget.bind("<Button-2>", lambda e: self._zoom_reset())
+            widget.bind("<Key-q>", lambda e: self.close_fullscreen())
+            widget.bind("<Key-Q>", lambda e: self.close_fullscreen())
+
+        self.fs_video_label.bind("<Double-Button-1>", lambda e: self.close_fullscreen())
+        self.fs_window.protocol("WM_DELETE_WINDOW", self.close_fullscreen)
+
+        self._update_fs_hud()
+        self.fs_window.focus_force()
+
+    def close_fullscreen(self, event=None):
+        if self.fs_window is not None:
+            try:
+                self.fs_window.destroy()
+            except Exception:
+                pass
+            self.fs_window = None
+            self._fs_photo = None
+            self.fs_video_label = None
+            self.fs_title_label = None
+            self.fs_zoom_label = None
+            self.fs_pill_label = None
+            self.last_sig = None
+            self.root.focus_force()
+
+    def _update_fs_hud(self):
+        if self.fs_window is None or not self.fs_window.winfo_exists():
+            return
+        cam = self.selected_cam()
+        if not cam:
+            return
+        ids = [c["id"] for c in self.cameras]
+        try:
+            idx = ids.index(cam["id"]) + 1
+        except ValueError:
+            idx = 1
+        tot = len(self.cameras)
+        room = cam.get("room") or "General"
+        mode = cam.get("mode") or "Standard"
+        z = self.get_zoom(cam["id"])
+
+        text = f"CAM {idx}/{tot} :  {cam['name']}   |   Room / Class: {room}   |   Mode: {mode}   |   Source: {KIND_SHORT.get(cam['kind'], cam['kind'])}"
+        if self.fs_title_label is not None:
+            self.fs_title_label.config(text=text)
+        if self.fs_zoom_label is not None:
+            self.fs_zoom_label.config(text=f"{z:.1f}x")
+
+        cid = cam["id"]
+        s = self.streams.get(cid)
+        if s is not None and s.state == "live":
+            pill_txt, pill_bg, pill_fg = "● LIVE", "#064e3b", "#34d399"
+        elif s is not None and s.state in ("connecting", "reconnecting"):
+            pill_txt, pill_bg, pill_fg = "● CONNECTING…", "#78350f", "#fde68a"
+        elif cid in self.errors:
+            pill_txt, pill_bg, pill_fg = "● OFFLINE", "#7f1d1d", "#fca5a5"
+        elif self.rec_running(cid):
+            pill_txt, pill_bg, pill_fg = "● RECOGNIZING", "#4c1d95", "#c4b5fd"
+        else:
+            pill_txt, pill_bg, pill_fg = "● STANDBY", "#1e293b", "#94a3b8"
+
+        if self.fs_pill_label is not None:
+            self.fs_pill_label.config(text=pill_txt, bg=pill_bg, fg=pill_fg)
 
     def cam(self, cid):
         for c in self.cameras:
@@ -1430,7 +1672,8 @@ class App:
         tile[:] = BG_BGR
         cid = cam["id"]
         small_ui = th < 220 or tw < 320
-        scale = 0.4 if small_ui else 0.5
+        scale = 0.4 if small_ui else (0.85 if tw >= 1000 else 0.5)
+        thick = 2 if tw >= 1000 else 1
 
         s = self.streams.get(cid)
         frame = None
@@ -1456,15 +1699,16 @@ class App:
             stamp = f"{cam['name']}   {datetime.now():%H:%M:%S}"
             if zoom > 1.0:
                 stamp += f"  [{zoom:.1f}x]"
-            cv2.putText(tile, stamp, (9, 19), cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 0, 0), 3, cv2.LINE_AA)
-            cv2.putText(tile, stamp, (8, 18), cv2.FONT_HERSHEY_SIMPLEX, scale, (255, 255, 255), 1, cv2.LINE_AA)
+            y_pos = 28 if tw >= 1000 else 18
+            cv2.putText(tile, stamp, (10, y_pos + 1), cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 0, 0), thick + 2, cv2.LINE_AA)
+            cv2.putText(tile, stamp, (9, y_pos), cv2.FONT_HERSHEY_SIMPLEX, scale, (255, 255, 255), thick, cv2.LINE_AA)
         else:
             main, sub, color = self._tile_message(cam)
-            self._put_center(tile, main, th // 2, scale + 0.3, color, 1)
+            self._put_center(tile, main, th // 2, scale + 0.3, color, thick)
             if sub:
-                self._put_center(tile, sub, th // 2 + 26, scale, (139, 116, 100))
-            cv2.putText(tile, cam["name"], (8, 18), cv2.FONT_HERSHEY_SIMPLEX, scale,
-                        (200, 200, 200), 1, cv2.LINE_AA)
+                self._put_center(tile, sub, th // 2 + (36 if tw >= 1000 else 26), scale, (139, 116, 100), thick)
+            cv2.putText(tile, cam["name"], (8, 28 if tw >= 1000 else 18), cv2.FONT_HERSHEY_SIMPLEX, scale,
+                        (200, 200, 200), thick, cv2.LINE_AA)
         if highlight:
             cv2.rectangle(tile, (0, 0), (tw - 1, th - 1), (235, 99, 37), 3)
         return tile
@@ -1494,7 +1738,11 @@ class App:
 
         bw = max(self.video_box.winfo_width(), 200)
         bh = max(self.video_box.winfo_height(), 150)
-        sig = (bw, bh, self.view_mode, self.selected_id,
+        fs_active = bool(self.fs_window is not None and self.fs_window.winfo_exists() and self.fs_video_label is not None)
+        fw = max(self.fs_video_label.winfo_width(), 640) if fs_active else 0
+        fh = max(self.fs_video_label.winfo_height(), 480) if fs_active else 0
+
+        sig = (bw, bh, self.view_mode, self.selected_id, fs_active, fw, fh,
                tuple((c["id"], c["name"], self.get_zoom(c["id"])) for c in cams),
                tuple((cid, s.frame_id, s.state) for cid, s in self.streams.items()),
                tuple(sorted(self.errors)),
@@ -1532,6 +1780,19 @@ class App:
             self._photo = ImageTk.PhotoImage(img)
             self.video_label.config(image=self._photo, text="")
         self.video_label.imgtk = self._photo
+
+        # Render full-screen view if active
+        if fs_active:
+            cur_cam = self.selected_cam()
+            if cur_cam:
+                fs_tile = self._tile(cur_cam, fw, fh, highlight=False)
+                fs_img = Image.fromarray(cv2.cvtColor(fs_tile, cv2.COLOR_BGR2RGB))
+                if self._fs_photo is not None and (self._fs_photo.width(), self._fs_photo.height()) == fs_img.size:
+                    self._fs_photo.paste(fs_img)
+                else:
+                    self._fs_photo = ImageTk.PhotoImage(fs_img)
+                    self.fs_video_label.config(image=self._fs_photo, text="")
+                self.fs_video_label.imgtk = self._fs_photo
 
     # ------------------------------------------------------------ status bits
     def _cam_status(self, cid):
@@ -1574,6 +1835,7 @@ class App:
         if pill != self.last_pill:
             self.last_pill = pill
             self.status_pill.config(text=pill[0], bg=pill[1], fg=pill[2])
+        self._update_fs_hud()
 
     def _update_rec_ui(self):
         running = [c for c in self.procs if self.rec_running(c)]
@@ -1888,6 +2150,7 @@ class App:
 
     # ------------------------------------------------------------------- exit
     def on_close(self):
+        self.close_fullscreen()
         running = [c for c in self.procs if self.rec_running(c)]
         if running:
             if not messagebox.askokcancel(
