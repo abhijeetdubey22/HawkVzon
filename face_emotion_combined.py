@@ -424,10 +424,14 @@ while True:
         color = face["color"]
         label = face["label"]
         cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
-        cv2.putText(frame, label, (left, max(20, top - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)
+        y_pos = max(24, top - 10)
+        # 2-pass text outline: black stroke behind colored text for maximum contrast against any video background
+        cv2.putText(frame, label, (left, y_pos), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 4)
+        cv2.putText(frame, label, (left, y_pos), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)
 
-    # Display FPS and active system info
+    # Display FPS and active system info (with high-contrast shadow)
     if not HEADLESS:
+        cv2.putText(frame, f"FPS: {fps:.1f}", (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 4)
         cv2.putText(frame, f"FPS: {fps:.1f}", (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
         cv2.imshow(window_title, frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):

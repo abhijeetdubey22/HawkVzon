@@ -668,15 +668,15 @@ class SettingsDialog(tk.Toplevel):
         self.v_use_wa = tk.BooleanVar(value=bool(self.s.get("use_whatsapp", True)))
         ttk.Checkbutton(pad, text="Send Alerts via WhatsApp ONLY (Disable Email & SMS)",
                         variable=self.v_use_wa, style="Card.TCheckbutton").grid(
-            row=4, column=0, columnspan=2, sticky="w", pady=(2, 4))
+            row=4, column=0, columnspan=2, sticky="w", pady=(6, 6))
 
         self.v_alert_unknown = tk.BooleanVar(value=bool(self.s.get("alert_unknown", True)))
         ttk.Checkbutton(pad, text="Alert on Unknown Person Detection (with Snapshot Photo)",
                         variable=self.v_alert_unknown, style="Card.TCheckbutton").grid(
-            row=5, column=0, columnspan=2, sticky="w", pady=(2, 6))
+            row=5, column=0, columnspan=2, sticky="w", pady=(6, 6))
 
         ttk.Label(pad, text="WhatsApp Gateway / API Provider", style="CardTitle.TLabel").grid(
-            row=6, column=0, columnspan=2, sticky="w", pady=(12, 4))
+            row=6, column=0, columnspan=2, sticky="w", pady=(14, 6))
         self.v_sid = row(7, "Twilio Account SID", "twilio_sid", hint="From twilio.com/console")
         self.v_tok = row(9, "Twilio Auth Token", "twilio_token", show="*")
         self.v_from = row(11, "Twilio WhatsApp Sender", "twilio_from",
@@ -686,13 +686,13 @@ class SettingsDialog(tk.Toplevel):
         self.v_cc = row(15, "Default Country Code", "default_country_code")
 
         ttk.Label(pad, text="Principal's Office Intrusion Rules", style="CardTitle.TLabel").grid(
-            row=17, column=0, columnspan=2, sticky="w", pady=(12, 4))
+            row=17, column=0, columnspan=2, sticky="w", pady=(14, 6))
         self.v_auth = row(18, "Authorized Personnel", "authorized_principal",
                           hint="Comma-separated names (e.g. Principal, Admin). Others trigger alert.")
         self.v_alert_principal = tk.BooleanVar(value=bool(self.s.get("alert_principal", True)))
         ttk.Checkbutton(pad, text="Enable Principal's Office Intrusion Alert",
                         variable=self.v_alert_principal, style="Card.TCheckbutton").grid(
-            row=20, column=0, columnspan=2, sticky="w", pady=(4, 6))
+            row=20, column=0, columnspan=2, sticky="w", pady=(6, 8))
 
         ttk.Label(pad, style="Muted.TLabel", justify="left",
                   text="Configuration is stored securely on this computer in data/school_settings.json.").grid(

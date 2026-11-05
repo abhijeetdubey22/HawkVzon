@@ -22,26 +22,26 @@ C = dict(
     text="#f8fafc",          # High-contrast crisp white primary
     text_sec="#cbd5e1",      # Slate-300 secondary text
     muted="#8899b5",         # Slate-400 helper / muted text
-    subtle="#5d6f8e",        # Slate-500 subtle text / hints
+    subtle="#7385a4",        # Slate-400 subtle text / hints (WCAG AA 4.59:1)
     
     # Primary Action (Electric Blue / Cyan)
     primary="#38bdf8",       # Sky-400 / Electric Cyan-Blue
     primary_h="#0284c7",     # Sky-600 (hover)
-    primary_btn="#2563eb",   # Solid Blue Button
+    primary_btn="#2563eb",   # Solid Blue Button (WCAG AA 5.17:1)
     primary_btn_h="#1d4ed8", # Solid Blue Button Hover
     primary_light="#172554", # Deep blue highlight tint
     
-    # Semantic States (Luminous & High-Contrast)
-    success="#10b981",       # Emerald-500 (Present / Online / Saved)
-    success_h="#059669",     # Emerald-600
+    # Semantic States (Luminous & High-Contrast - WCAG 2.1 AA Compliant)
+    success="#047857",       # Emerald-700 (Present / Online / Saved - 5.48:1 contrast with white)
+    success_h="#065f46",     # Emerald-800 hover
     success_light="#064e3b", # Emerald-900 tint
     
-    danger="#f43f5e",        # Rose-500 (Absent / Intruder / Delete)
-    danger_h="#e11d48",      # Rose-600
+    danger="#e11d48",        # Rose-600 (Absent / Intruder / Delete - 4.70:1 contrast with white)
+    danger_h="#be123c",      # Rose-700 hover
     danger_light="#4c0519",  # Rose-950 tint
     
-    violet="#8b5cf6",        # Violet-500 (AI / Recognition / WhatsApp)
-    violet_h="#7c3aed",      # Violet-600
+    violet="#7c3aed",        # Violet-600 (AI / Recognition / WhatsApp - 5.70:1 contrast with white)
+    violet_h="#6d28d9",      # Violet-700 hover
     violet_light="#2e1065",  # Violet-950 tint
     
     amber="#fbbf24",         # Amber-400 (Late / Warning / Connecting)
@@ -88,7 +88,7 @@ def apply_style(root):
           foreground=[("active", C["primary"])],
           indicatorbackground=[("active", C["border"])])
 
-    # Solid Action Buttons
+    # Solid Action Buttons (Touch Target: 44px height per Apple HIG / Google Material)
     buttons = {
         "Primary": (C["primary_btn"], C["primary_btn_h"]),
         "Success": (C["success"], C["success_h"]),
@@ -98,27 +98,27 @@ def apply_style(root):
     for name, (bg, hover) in buttons.items():
         s.configure(f"{name}.TButton", background=bg, foreground="white",
                     borderwidth=0, focusthickness=0, focuscolor=bg,
-                    padding=(14, 8), font=FONT_B)
+                    padding=(16, 11), font=FONT_B)
         s.map(f"{name}.TButton",
               background=[("disabled", "#1e293b"), ("active", hover)],
               foreground=[("disabled", "#475569")])
 
     s.configure("Secondary.TButton", background=C["grey"], foreground=C["text"],
-                borderwidth=0, focusthickness=0, padding=(14, 8), font=FONT)
+                borderwidth=0, focusthickness=0, padding=(16, 11), font=FONT)
     s.map("Secondary.TButton",
           background=[("disabled", "#0f172a"), ("active", C["grey_h"])],
           foreground=[("disabled", "#475569"), ("active", "#ffffff")])
 
     # Input Fields (Dark Glass Aesthetic)
-    s.configure("TEntry", padding=6, fieldbackground=C["card_sub"],
+    s.configure("TEntry", padding=8, fieldbackground=C["card_sub"],
                 foreground=C["text"], bordercolor=C["border"],
                 lightcolor=C["border"], darkcolor=C["border"],
                 insertcolor=C["text"])
-    s.configure("TCombobox", padding=6, fieldbackground=C["card_sub"],
+    s.configure("TCombobox", padding=8, fieldbackground=C["card_sub"],
                 foreground=C["text"], bordercolor=C["border"],
                 lightcolor=C["border"], darkcolor=C["border"],
                 arrowcolor=C["text"])
-    s.configure("TSpinbox", padding=6, fieldbackground=C["card_sub"],
+    s.configure("TSpinbox", padding=8, fieldbackground=C["card_sub"],
                 foreground=C["text"], bordercolor=C["border"],
                 lightcolor=C["border"], darkcolor=C["border"],
                 arrowcolor=C["text"])
@@ -128,12 +128,12 @@ def apply_style(root):
           selectbackground=[("readonly", C["primary_light"])],
           selectforeground=[("readonly", C["text"])])
 
-    # Tables / Treeview (High-tech Dark Grid)
-    s.configure("Treeview", rowheight=32, font=FONT, background=C["card"],
+    # Tables / Treeview (High-tech Dark Grid - Touchscreen & Tablet Ready)
+    s.configure("Treeview", rowheight=38, font=FONT, background=C["card"],
                 fieldbackground=C["card"], foreground=C["text"],
                 bordercolor=C["border"], borderwidth=0)
     s.configure("Treeview.Heading", font=FONT_B, background=C["card_sub"],
-                foreground=C["muted"], relief="flat", padding=8,
+                foreground=C["text_sec"], relief="flat", padding=10,
                 bordercolor=C["border"])
     s.map("Treeview.Heading", background=[("active", C["border"])])
     s.map("Treeview",
