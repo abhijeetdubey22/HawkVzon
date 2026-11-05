@@ -396,3 +396,4 @@ def generate_html_report(target_date=None):
 if __name__ == "__main__":
     path = generate_html_report()
     print(f"Report generated successfully: {path}")
+

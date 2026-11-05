@@ -304,6 +304,12 @@ class CameraDialog(tk.Toplevel):
         suggested = ["Principal's Office"] + [c for c in classes if c != "Principal's Office"]
         ttk.Combobox(pad, textvariable=self.room_var, values=suggested).pack(fill="x", pady=(2, 10))
 
+        ttk.Label(pad, text="Camera operating mode / profile", style="Card.TLabel").pack(anchor="w")
+        def_m = cam.get("mode", CAMERA_MODES[0]) if cam else CAMERA_MODES[0]
+        self.mode_var = tk.StringVar(value=def_m)
+        ttk.Combobox(pad, textvariable=self.mode_var, state="readonly",
+                     values=CAMERA_MODES).pack(fill="x", pady=(2, 10))
+
         ttk.Label(pad, text="Source type", style="Card.TLabel").pack(anchor="w")
         self.kind_var = tk.StringVar(value=cam["kind"] if cam else SOURCE_CCTV)
         combo = ttk.Combobox(pad, textvariable=self.kind_var, state="readonly",
@@ -387,7 +393,8 @@ class CameraDialog(tk.Toplevel):
             messagebox.showwarning("Invalid source", err, parent=self)
             return
         self.result = {"name": name, "kind": kind, "source": source,
-                       "room": self.room_var.get().strip()}
+                       "room": self.room_var.get().strip(),
+                       "mode": self.mode_var.get().strip()}
         self.destroy()
 
 
@@ -558,10 +565,11 @@ class App:
 
         tree_wrap = ttk.Frame(cam_body, style="Inner.TFrame")
         tree_wrap.pack(fill="x")
-        self.cam_tree = ttk.Treeview(tree_wrap, columns=("name", "room", "type", "status"),
+        self.cam_tree = ttk.Treeview(tree_wrap, columns=("name", "room", "mode", "type", "status"),
                                      show="headings", height=4, selectmode="browse")
-        for col, text, w, anchor in (("name", "Name", 100, "w"), ("room", "Class", 75, "center"),
-                                     ("type", "Type", 65, "center"), ("status", "Status", 85, "center")):
+        for col, text, w, anchor in (("name", "Name", 95, "w"), ("room", "Class", 70, "center"),
+                                     ("mode", "Mode", 80, "center"), ("type", "Type", 55, "center"),
+                                     ("status", "Status", 75, "center")):
             self.cam_tree.heading(col, text=text)
             self.cam_tree.column(col, width=w, anchor=anchor)
         cam_sb = ttk.Scrollbar(tree_wrap, orient="vertical", command=self.cam_tree.yview)
@@ -623,12 +631,26 @@ class App:
         ttk.Checkbutton(act, text="Outdoor / Long-Range Mode (25+ ft)",
                         variable=self.long_range_var,
                         style="Card.TCheckbutton").pack(anchor="w", pady=(4, 0))
+        ttk.Button(act, text="📊 Export Daily Report (HTML)", style="Primary.TButton",
+                   command=self.export_daily_report).pack(fill="x", pady=(8, 0))
         ttk.Button(act, text="Open Logs & Snapshots", style="Secondary.TButton",
                    command=lambda: open_folder(LOGS_DIR)).pack(fill="x", pady=(8, 0))
 
         # ---------------- Logs card ----------------
         log_card, log_body = self._card(body, "Recent Attendance & Recognition")
         log_card.grid(row=1, column=0, sticky="nsew", padx=(0, 14))
+
+        # Search Bar
+        search_row = ttk.Frame(log_body, style="Inner.TFrame")
+        search_row.pack(fill="x", pady=(0, 8))
+        ttk.Label(search_row, text="🔍 Search student:", style="Card.TLabel").pack(side="left")
+        self.search_var = tk.StringVar()
+        self.search_entry = ttk.Entry(search_row, textvariable=self.search_var, width=22)
+        self.search_entry.pack(side="left", padx=(8, 8))
+        self.search_var.trace_add("write", lambda *_: self.filter_attendance_table())
+
+        ttk.Button(search_row, text="Clear", style="Secondary.TButton",
+                   command=lambda: self.search_var.set("")).pack(side="left")
 
         columns = ("Name", "Age", "Match %", "Emotion", "Timestamp")
         wrap = ttk.Frame(log_body, style="Inner.TFrame")
@@ -681,8 +703,10 @@ class App:
     def _reload_cameras(self):
         self.cam_tree.delete(*self.cam_tree.get_children())
         for c in self.cameras:
+            m_full = c.get("mode") or "Classroom"
+            m_short = m_full.split(" ")[0] if "(" in m_full else m_full
             self.cam_tree.insert("", "end", iid=c["id"],
-                                 values=(c["name"], c.get("room") or "-", KIND_SHORT[c["kind"]], "Idle"),
+                                 values=(c["name"], c.get("room") or "-", m_short, KIND_SHORT[c["kind"]], "Idle"),
                                  tags=("idle",))
         self.last_cam_status = {}
         if self.selected_id and self.cam_tree.exists(self.selected_id):
@@ -1198,8 +1222,18 @@ class App:
         env["FACE_CAMERA_NAME"] = cam["name"]
         env["FACE_CAMERA_ID"] = cid
         env["FACE_CLASS"] = cam.get("room", "")
+        mode = cam.get("mode", "")
+        if not mode:
+            if "principal" in cam["name"].lower() or "principal" in cam.get("room", "").lower():
+                mode = "Principal's Office / High Security"
+            else:
+                mode = "Classroom (Indoor / Standard)"
+        env["FACE_CAMERA_MODE"] = mode
         env["FACE_HEADLESS"] = "0" if getattr(self, "show_popup_var", None) is None or self.show_popup_var.get() else "1"
-        env["FACE_DETECTION_SCALE"] = "0.65" if getattr(self, "long_range_var", None) and self.long_range_var.get() else "0.50"
+        if "outdoor" in mode.lower() or "gate" in mode.lower() or (getattr(self, "long_range_var", None) and self.long_range_var.get()):
+            env["FACE_DETECTION_SCALE"] = "0.70"
+        else:
+            env["FACE_DETECTION_SCALE"] = "0.50"
         try:
             proc = subprocess.Popen([sys.executable or "python", SCRIPT_PATH],
                                     cwd=BASE_DIR, env=env)
@@ -1265,28 +1299,49 @@ class App:
             return
         self.log_mtime = mtime
 
-        self.tree.delete(*self.tree.get_children())
         total = 0
         if os.path.exists(LOG_FILE):
             try:
                 with open(LOG_FILE, "r", encoding="utf-8", newline="") as f:
-                    rows = list(csv.reader(f))[1:]
-                total = len(rows)
-                for i, row in enumerate(reversed(rows[-100:])):     # newest first
-                    row = (row + [""] * 5)[:5]
-                    parity = "even" if i % 2 == 0 else "odd"
-                    name = str(row[0]).strip().lower() if row and row[0] else ""
-                    if name in ("stranger", "unknown"):
-                        tag = f"stranger_{parity}"
-                    elif name:
-                        tag = f"known_{parity}"
-                    else:
-                        tag = parity
-                    self.tree.insert("", "end", values=row, tags=(tag,))
+                    self.last_log_rows = list(csv.reader(f))[1:]
+                total = len(self.last_log_rows)
+                self.filter_attendance_table()
             except Exception:
                 pass
+        else:
+            self.last_log_rows = []
+            self.filter_attendance_table()
         self.stats.config(text=f"Cameras: {len(self.cameras)}   |   "
                                f"Registered faces: {faces}   |   Log entries: {total}")
+
+    def filter_attendance_table(self):
+        query = getattr(self, "search_var", None)
+        q = query.get().strip().lower() if query else ""
+        rows = getattr(self, "last_log_rows", [])
+        self.tree.delete(*self.tree.get_children())
+        filtered = [r for r in rows if not q or (r and q in str(r[0]).lower())]
+        for i, row in enumerate(reversed(filtered[-100:])):     # newest first
+            row = (row + [""] * 5)[:5]
+            parity = "even" if i % 2 == 0 else "odd"
+            name = str(row[0]).strip().lower() if row and row[0] else ""
+            if name in ("stranger", "unknown"):
+                tag = f"stranger_{parity}"
+            elif name:
+                tag = f"known_{parity}"
+            else:
+                tag = parity
+            self.tree.insert("", "end", values=row, tags=(tag,))
+
+    def export_daily_report(self):
+        try:
+            import report_generator
+            import webbrowser
+            from pathlib import Path
+            report_path = report_generator.generate_html_report()
+            webbrowser.open(Path(report_path).resolve().as_uri())
+            self.set_status(f"Exported HTML Report: {os.path.basename(report_path)}")
+        except Exception as e:
+            messagebox.showerror("Export Report Error", str(e), parent=self.root)
 
     # ------------------------------------------------------------------- exit
     def on_close(self):

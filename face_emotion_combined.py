@@ -43,6 +43,8 @@ threading.Thread(target=tts_worker, daemon=True).start()
 
 def speak_async(text):
     """Queue speech without blocking video processing, dropping stale audio."""
+    if globals().get("is_silent_mode", False):
+        return
     if speech_queue.qsize() < 2:
         speech_queue.put(text)
 
@@ -123,8 +125,15 @@ src = os.environ.get("FACE_SOURCE", "0")
 src = int(src) if str(src).isdigit() else src
 cam_name = os.environ.get("FACE_CAMERA_NAME", "Camera 0")
 cam_room = os.environ.get("FACE_CLASS", "")
-is_principal_office = "principal" in cam_name.lower() or "principal" in cam_room.lower()
-window_title = f"Face & Emotion Recognition - {cam_name}"
+cam_mode = os.environ.get("FACE_CAMERA_MODE", "Classroom (Indoor / Standard)")
+is_principal_office = ("principal" in cam_name.lower() or 
+                       "principal" in cam_room.lower() or 
+                       "principal" in cam_mode.lower())
+is_silent_mode = ("library" in cam_mode.lower() or "silent" in cam_mode.lower() or "exam" in cam_mode.lower())
+is_corridor_mode = ("corridor" in cam_mode.lower() or "transit" in cam_mode.lower())
+is_outdoor_mode = ("outdoor" in cam_mode.lower() or "gate" in cam_mode.lower())
+
+window_title = f"Face & Emotion Recognition - {cam_name} [{cam_mode.split(' ')[0]}]"
 HEADLESS = os.environ.get("FACE_HEADLESS", "0") == "1" or "--headless" in sys.argv
 
 class ThreadedStream:
@@ -234,7 +243,7 @@ fps = 0.0
 cached_faces = []
 last_demographics = {}
 frame_count = 0
-PROCESS_EVERY_N_FRAMES = 3  # High-speed interleaving: runs AI on every 3rd new frame, renders at 30 FPS
+PROCESS_EVERY_N_FRAMES = 2 if is_corridor_mode else 3  # High-speed interleaving: runs AI every 2nd frame in corridor/transit, 3rd in standard
 
 # Wait up to 5 seconds for first valid frame; exit if stream is dead/unavailable
 has_initial_frame = False
