@@ -6,6 +6,7 @@ import os
 import csv
 import json
 import base64
+from html import escape as html_escape
 from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -48,8 +49,8 @@ def generate_html_report(target_date=None):
         try:
             with open(settings_file, "r", encoding="utf-8") as f:
                 s_data = json.load(f)
-                school_name = s_data.get("school_name", school_name)
-                late_cutoff = s_data.get("late_time", late_cutoff)
+                school_name = html_escape(str(s_data.get("school_name", school_name)))
+                late_cutoff = html_escape(str(s_data.get("late_time", late_cutoff)))
         except Exception:
             pass
 
@@ -242,11 +243,12 @@ def generate_html_report(target_date=None):
 
     for emo, cnt in sorted_emotions:
         pct = (cnt / total_emo_samples) * 100
+        emo_esc = html_escape(str(emo))
         color_bar = "bg-emerald-500" if emo.lower() == "happy" else ("bg-sky-500" if emo.lower() == "neutral" else "bg-amber-500")
         html += f"""
           <div>
             <div class="flex justify-between text-xs font-medium text-slate-300 mb-1">
-              <span>{emo}</span>
+              <span>{emo_esc}</span>
               <span>{cnt} detections ({pct:.1f}%)</span>
             </div>
             <div class="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden">
@@ -302,6 +304,12 @@ def generate_html_report(target_date=None):
         """
     else:
         for s in seen_students.values():
+            s_name = html_escape(str(s.get("name", "")))
+            s_age = html_escape(str(s.get("age", "")))
+            s_match = html_escape(str(s.get("match", "")))
+            s_emotion = html_escape(str(s.get("emotion", "")))
+            s_first_seen = html_escape(str(s.get("first_seen", "")))
+            s_camera = html_escape(str(s.get("camera", "")))
             status_badge = (
                 '<span class="px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-950/80 text-amber-300 border border-amber-800/50">Late</span>'
                 if s.get("is_late") else
@@ -309,12 +317,12 @@ def generate_html_report(target_date=None):
             )
             html += f"""
             <tr class="hover:bg-slate-800/40 transition">
-              <td class="py-3.5 px-4 font-semibold text-white">{s["name"]}</td>
-              <td class="py-3.5 px-4">{s["age"]}</td>
-              <td class="py-3.5 px-4 text-emerald-400 font-mono">{s["match"]}</td>
-              <td class="py-3.5 px-4">{s["emotion"]}</td>
-              <td class="py-3.5 px-4 font-mono text-slate-400">{s["first_seen"]}</td>
-              <td class="py-3.5 px-4">{s["camera"]}</td>
+              <td class="py-3.5 px-4 font-semibold text-white">{s_name}</td>
+              <td class="py-3.5 px-4">{s_age}</td>
+              <td class="py-3.5 px-4 text-emerald-400 font-mono">{s_match}</td>
+              <td class="py-3.5 px-4">{s_emotion}</td>
+              <td class="py-3.5 px-4 font-mono text-slate-400">{s_first_seen}</td>
+              <td class="py-3.5 px-4">{s_camera}</td>
               <td class="py-3.5 px-4">{status_badge}</td>
             </tr>
             """
@@ -346,13 +354,15 @@ def generate_html_report(target_date=None):
         for snap in snapshots_data:
             tag_class = "bg-rose-950/80 text-rose-300 border-rose-800/50" if snap["is_intrusion"] else "bg-slate-800/90 text-slate-300 border-slate-700"
             tag_text = "Restricted Area" if snap["is_intrusion"] else "Unknown Sighting"
+            snap_fn = html_escape(str(snap.get("filename", "")))
+            snap_time = html_escape(str(snap.get("time", "")))
             html += f"""
               <div class="bg-slate-950 border border-slate-800 rounded-lg overflow-hidden group">
                 <div class="aspect-video bg-black flex items-center justify-center overflow-hidden">
-                  <img src="{snap['b64']}" alt="{snap['filename']}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
+                  <img src="{snap['b64']}" alt="{snap_fn}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
                 </div>
                 <div class="p-2.5 flex items-center justify-between text-xs">
-                  <span class="font-mono text-slate-400">{snap['time']}</span>
+                  <span class="font-mono text-slate-400">{snap_time}</span>
                   <span class="px-2 py-0.5 rounded text-[10px] font-semibold border {tag_class}">{tag_text}</span>
                 </div>
               </div>

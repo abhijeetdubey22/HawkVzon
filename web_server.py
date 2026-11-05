@@ -10,11 +10,109 @@ import json
 import csv
 import threading
 import mimetypes
+import io
+import hashlib
+import hmac
+import base64
 from datetime import datetime
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 import cv2
 import numpy as np
+
+try:
+    from cryptography.fernet import Fernet
+except ImportError:
+    class Fernet:
+        def __init__(self, key):
+            if isinstance(key, str):
+                key = key.encode("utf-8")
+            self._key = hashlib.sha256(key).digest()
+
+        def decrypt(self, token):
+            if isinstance(token, str):
+                token = token.encode("utf-8")
+            raw = base64.urlsafe_b64decode(token)
+            if len(raw) < 49 or raw[0] != 0x80:
+                raise ValueError("Invalid token format")
+            nonce = raw[1:17]
+            tag = raw[-32:]
+            ct = raw[17:-32]
+            expected_tag = hmac.new(self._key, nonce + ct, hashlib.sha256).digest()
+            if not hmac.compare_digest(tag, expected_tag):
+                raise ValueError("Token verification failed")
+            keystream = b""
+            block = 0
+            while len(keystream) < len(ct):
+                keystream += hmac.new(self._key, nonce + block.to_bytes(4, "big"), hashlib.sha256).digest()
+                block += 1
+            return bytes(b ^ k for b, k in zip(ct, keystream))
+
+def _get_face_key():
+    k = os.environ.get("FACE_KEY", "").strip()
+    if k:
+        return k.encode()
+    for kf in (os.path.join(os.path.expanduser("~"), ".face_dashboard", "face.key"),
+               os.path.join(BASE_DIR, "data", "face.key")):
+        if os.path.exists(kf):
+            try:
+                with open(kf, "rb") as f:
+                    return f.read().strip()
+            except OSError:
+                pass
+    return None
+
+def load_known_faces(faces_dir):
+    k = _get_face_key()
+    fer = Fernet(k) if k and Fernet is not None else None
+    encs, names, ages = [], [], []
+    if os.path.exists(faces_dir):
+        for fn in sorted(os.listdir(faces_dir)):
+            if fn.endswith(".face") and fer:
+                try:
+                    with open(os.path.join(faces_dir, fn), "rb") as f:
+                        enc = np.load(io.BytesIO(fer.decrypt(f.read())), allow_pickle=False)
+                    parts = fn[:-5].split("_")
+                    encs.append(enc)
+                    names.append(" ".join(parts[:-1]) if len(parts) >= 2 else parts[0])
+                    ages.append(parts[-1] if len(parts) >= 2 else "-")
+                except Exception as e:
+                    print(f"[Warning] Failed to decrypt {fn}: {e}")
+            elif fn.endswith(".npy"):
+                try:
+                    enc = np.load(os.path.join(faces_dir, fn), allow_pickle=True)
+                    parts = fn[:-4].split("_")
+                    encs.append(enc)
+                    names.append(" ".join(parts[:-1]) if len(parts) >= 2 else parts[0])
+                    ages.append(parts[-1] if len(parts) >= 2 else "-")
+                except Exception:
+                    pass
+    if not encs:
+        flat_enc = os.path.join(BASE_DIR, "known_face_encodings.npy")
+        flat_name = os.path.join(BASE_DIR, "known_face_names.npy")
+        flat_age = os.path.join(BASE_DIR, "known_face_ages.npy")
+        if os.path.exists(flat_enc) and os.path.exists(flat_name):
+            try:
+                encs = list(np.load(flat_enc, allow_pickle=True))
+                names = list(np.load(flat_name, allow_pickle=True))
+                ages = list(np.load(flat_age, allow_pickle=True)) if os.path.exists(flat_age) else ["-"] * len(names)
+            except Exception:
+                pass
+
+    valid_encs, valid_names, valid_ages = [], [], []
+    for e, n, a in zip(encs, names, ages):
+        try:
+            arr = np.asarray(e, dtype=np.float64).ravel()
+            if arr.shape == (128,):
+                valid_encs.append(arr)
+                valid_names.append(n)
+                valid_ages.append(a)
+        except Exception:
+            continue
+
+    if valid_encs:
+        return np.array(valid_encs, dtype=np.float64), np.array(valid_names), np.array(valid_ages)
+    return np.empty((0, 128), dtype=np.float64), np.array([]), np.array([])
 
 # Ensure stdout uses UTF-8
 if hasattr(sys.stdout, "reconfigure"):
@@ -58,18 +156,13 @@ class VisionWorker:
         self.camera_mode = "Classroom (Indoor / Standard)"
         self.load_config()
 
-        # Load database safely
+        # Load database safely (support encrypted .face files and fallback to .npy)
         import face_recognition
         from emotion_predictor import EmotionClassifier
         self.face_recognition = face_recognition
         
-        enc_path = os.path.join(BASE_DIR, "known_face_encodings.npy")
-        names_path = os.path.join(BASE_DIR, "known_face_names.npy")
-        ages_path = os.path.join(BASE_DIR, "known_face_ages.npy")
-
-        self.known_encodings = np.load(enc_path, allow_pickle=True) if os.path.exists(enc_path) else np.empty((0, 128))
-        self.known_names = np.load(names_path, allow_pickle=True) if os.path.exists(names_path) else np.array([])
-        self.known_ages = np.load(ages_path, allow_pickle=True) if os.path.exists(ages_path) else ["-"] * len(self.known_names)
+        faces_dir = os.path.join(BASE_DIR, "faces")
+        self.known_encodings, self.known_names, self.known_ages = load_known_faces(faces_dir)
         
         model_path = os.path.join(BASE_DIR, "emotion_model.hdf5")
         self.emotion_classifier = EmotionClassifier(model_path) if os.path.exists(model_path) else None
@@ -215,9 +308,14 @@ class VisionWorker:
                 new_faces = []
 
                 for enc, loc in zip(encodings, full_locs):
-                    dist = self.face_recognition.face_distance(self.known_encodings, enc)
-                    best_idx = np.argmin(dist) if len(dist) > 0 else -1
-                    confidence = (1 - dist[best_idx]) * 100 if best_idx >= 0 else 0
+                    if len(self.known_encodings) > 0:
+                        dist = self.face_recognition.face_distance(self.known_encodings, enc)
+                        best_idx = np.argmin(dist) if len(dist) > 0 else -1
+                        confidence = (1 - dist[best_idx]) * 100 if best_idx >= 0 else 0
+                    else:
+                        dist = np.empty((0,))
+                        best_idx = -1
+                        confidence = 0
 
                     t, r, b, l = loc
                     roi = frame[t:b, l:r]
