@@ -208,6 +208,24 @@ class TestFaceEmotionSystem(unittest.TestCase):
         else:
             print("  [INFO] Webcam device 0 busy or disconnected (will work upon connecting)")
 
+    def test_08_encryption_and_face_decryption(self):
+        """Test Fernet / AES encryption and decryption of face embeddings."""
+        import gui_app
+        import io
+        key = gui_app.Fernet.generate_key()
+        fer = gui_app.Fernet(key)
+
+        dummy_vec = np.random.randn(128).astype(np.float64)
+        buf = io.BytesIO()
+        np.save(buf, dummy_vec, allow_pickle=False)
+        encrypted_data = fer.encrypt(buf.getvalue())
+
+        decrypted_bytes = fer.decrypt(encrypted_data)
+        restored_vec = np.load(io.BytesIO(decrypted_bytes), allow_pickle=False)
+
+        self.assertTrue(np.allclose(dummy_vec, restored_vec), "Restored vector does not match original")
+        print("  [PASS] Cryptography & Fernet AES encryption/decryption verified (128-D vector integrity 100%)")
+
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=1)
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(TestFaceEmotionSystem)

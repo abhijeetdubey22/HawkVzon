@@ -13,6 +13,38 @@ import queue
 import sys
 import json
 import math
+import io
+import hashlib
+import hmac
+import base64
+
+try:
+    from cryptography.fernet import Fernet
+except ImportError:
+    class Fernet:
+        def __init__(self, key):
+            if isinstance(key, str):
+                key = key.encode("utf-8")
+            self._key = hashlib.sha256(key).digest()
+
+        def decrypt(self, token):
+            if isinstance(token, str):
+                token = token.encode("utf-8")
+            raw = base64.urlsafe_b64decode(token)
+            if len(raw) < 49 or raw[0] != 0x80:
+                raise ValueError("Invalid token format")
+            nonce = raw[1:17]
+            tag = raw[-32:]
+            ct = raw[17:-32]
+            expected_tag = hmac.new(self._key, nonce + ct, hashlib.sha256).digest()
+            if not hmac.compare_digest(tag, expected_tag):
+                raise ValueError("Token verification failed")
+            keystream = b""
+            block = 0
+            while len(keystream) < len(ct):
+                keystream += hmac.new(self._key, nonce + block.to_bytes(4, "big"), hashlib.sha256).digest()
+                block += 1
+            return bytes(b ^ k for b, k in zip(ct, keystream))
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -56,14 +88,61 @@ SPEECH_COOLDOWN = 15.0     # seconds before repeating greeting for same person
 LOG_COOLDOWN = 30.0        # seconds before logging attendance again for same person
 UNKNOWN_COOLDOWN = 10.0    # seconds between unknown snapshots / alerts
 
-# Load known face data
-encodings_path = os.path.join(BASE_DIR, "known_face_encodings.npy")
-names_path = os.path.join(BASE_DIR, "known_face_names.npy")
-ages_path = os.path.join(BASE_DIR, "known_face_ages.npy")
+# Load known face data (Encrypted .face files with fallback to .npy)
+def _get_face_key():
+    k = os.environ.get("FACE_KEY", "").strip()
+    if k:
+        return k.encode()
+    for kf in (os.path.join(os.path.expanduser("~"), ".face_dashboard", "face.key"),
+               os.path.join(BASE_DIR, "data", "face.key")):
+        if os.path.exists(kf):
+            try:
+                with open(kf, "rb") as f:
+                    return f.read().strip()
+            except OSError:
+                pass
+    return None
 
-known_face_encodings = np.load(encodings_path, allow_pickle=True)
-known_face_names = np.load(names_path, allow_pickle=True)
-known_face_ages = np.load(ages_path, allow_pickle=True) if os.path.exists(ages_path) else ["-"] * len(known_face_names)
+def load_known_faces(faces_dir):
+    k = _get_face_key()
+    fer = Fernet(k) if k and Fernet is not None else None
+    encs, names, ages = [], [], []
+    if os.path.exists(faces_dir):
+        for fn in sorted(os.listdir(faces_dir)):
+            if fn.endswith(".face") and fer:
+                try:
+                    with open(os.path.join(faces_dir, fn), "rb") as f:
+                        enc = np.load(io.BytesIO(fer.decrypt(f.read())), allow_pickle=False)
+                    parts = fn[:-5].split("_")
+                    encs.append(enc)
+                    names.append(" ".join(parts[:-1]) if len(parts) >= 2 else parts[0])
+                    ages.append(parts[-1] if len(parts) >= 2 else "-")
+                except Exception as e:
+                    print(f"[Warning] Failed to decrypt {fn}: {e}")
+            elif fn.endswith(".npy"):
+                try:
+                    enc = np.load(os.path.join(faces_dir, fn), allow_pickle=True)
+                    parts = fn[:-4].split("_")
+                    encs.append(enc)
+                    names.append(" ".join(parts[:-1]) if len(parts) >= 2 else parts[0])
+                    ages.append(parts[-1] if len(parts) >= 2 else "-")
+                except Exception:
+                    pass
+    if not encs:
+        # Fallback to flat files if faces/ had no usable entries
+        flat_enc = os.path.join(BASE_DIR, "known_face_encodings.npy")
+        flat_name = os.path.join(BASE_DIR, "known_face_names.npy")
+        flat_age = os.path.join(BASE_DIR, "known_face_ages.npy")
+        if os.path.exists(flat_enc) and os.path.exists(flat_name):
+            try:
+                encs = list(np.load(flat_enc, allow_pickle=True))
+                names = list(np.load(flat_name, allow_pickle=True))
+                ages = list(np.load(flat_age, allow_pickle=True)) if os.path.exists(flat_age) else ["-"] * len(names)
+            except Exception:
+                pass
+    return np.array(encs, dtype=object), np.array(names, dtype=object), np.array(ages, dtype=object)
+
+known_face_encodings, known_face_names, known_face_ages = load_known_faces(os.path.join(BASE_DIR, "faces"))
 
 # Load school settings and match threshold
 settings_path = os.path.join(BASE_DIR, "data", "school_settings.json")
@@ -122,6 +201,13 @@ if not os.path.exists(log_file):
 
 # Initialize camera backend with environment variable support from dashboard
 src = os.environ.get("FACE_SOURCE", "0")
+if isinstance(src, str) and src.startswith("enc:"):
+    try:
+        k = _get_face_key()
+        if k and Fernet is not None:
+            src = Fernet(k).decrypt(src[4:].encode("ascii")).decode("utf-8")
+    except Exception as e:
+        print(f"[Warning] Failed to decrypt FACE_SOURCE: {e}")
 src = int(src) if str(src).isdigit() else src
 cam_name = os.environ.get("FACE_CAMERA_NAME", "Camera 0")
 cam_room = os.environ.get("FACE_CLASS", "")

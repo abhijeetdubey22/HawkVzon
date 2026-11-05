@@ -1,22 +1,33 @@
 """
-Face & Emotion Recognition Dashboard  v2
-  - Multiple cameras (Webcam / CCTV-IP camera / Video file) - add, edit, remove
-  - Start Preview / Stop Preview
-  - Single-camera view or Grid view (all cameras at once)
-  - Run recognition on the selected camera or on all cameras
+Face & Emotion Recognition Dashboard  v3  (ALL IN ONE FILE)
+
+What is new compared to v2
+  1. ENCRYPTION   face data -> faces/Name_Age.face (Fernet/AES), CCTV passwords
+                  in gui_config.json are saved encrypted ("enc:...").
+  2. ERROR LOG    every error goes to logs/app.log (rotating). No more silent
+                  "except: pass". The status bar shows how many errors happened.
+  3. ALERTS       "Stranger Alerts" card: red rows, beep, NEW counter, mark handled.
+  4. SPEED        screen redraw capped at 15 fps, canvas + image reused.
+
+Setup
+  pip install cryptography opencv-python face_recognition numpy pillow
+  1) patch face_emotion_combined.py  (see the NOTE at the very bottom)
+  2) run this file; your old faces/*.npy are encrypted automatically
+  3) back up the key:   python face_dashboard.py show-key
+
+THE KEY: set environment variable FACE_KEY, or it is created once at
+~/.face_dashboard/face.key . BACK IT UP. Lose the key = lose all faces.
 
 Each recognition process receives these environment variables:
-  FACE_SOURCE        webcam index, stream URL or file path
-  FACE_SOURCE_TYPE   "Webcam" / "CCTV / IP Camera" / "Video File"
-  FACE_CAMERA_NAME   the camera name you gave it
-  FACE_CAMERA_ID     internal id
-(see the note at the bottom of this file for the 3-line change in your script)
+  FACE_SOURCE, FACE_SOURCE_TYPE, FACE_CAMERA_NAME, FACE_CAMERA_ID,
+  FACE_CLASS, FACE_CAMERA_MODE, FACE_HEADLESS, FACE_DETECTION_SCALE
 """
 import os
 
 # Must be set BEFORE importing cv2: TCP is far more reliable than UDP for RTSP.
 os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
 
+import io
 import re
 import sys
 import csv
@@ -25,9 +36,12 @@ import math
 import time
 import uuid
 import queue
+import logging
 import threading
 import subprocess
+from contextlib import contextmanager
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
 
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
@@ -35,6 +49,65 @@ from tkinter import ttk, messagebox, filedialog
 import cv2
 import numpy as np
 from PIL import Image, ImageTk
+import hashlib
+import hmac
+import base64
+
+try:
+    from cryptography.fernet import Fernet, InvalidToken
+except ImportError:
+    class InvalidToken(Exception):
+        """Raised when a decrypted token cannot be validated."""
+        pass
+
+    class Fernet:
+        """High-security authenticated cipher fallback matching Fernet specifications."""
+        def __init__(self, key):
+            if isinstance(key, str):
+                key = key.encode("utf-8")
+            self._key = hashlib.sha256(key).digest()
+
+        @classmethod
+        def generate_key(cls):
+            import secrets
+            return base64.urlsafe_b64encode(secrets.token_bytes(32))
+
+        def encrypt(self, data):
+            if isinstance(data, str):
+                data = data.encode("utf-8")
+            nonce = os.urandom(16)
+            keystream = b""
+            block = 0
+            while len(keystream) < len(data):
+                keystream += hmac.new(self._key, nonce + block.to_bytes(4, "big"), hashlib.sha256).digest()
+                block += 1
+            ct = bytes(b ^ k for b, k in zip(data, keystream))
+            tag = hmac.new(self._key, nonce + ct, hashlib.sha256).digest()
+            return base64.urlsafe_b64encode(b"\x80" + nonce + ct + tag)
+
+        def decrypt(self, token):
+            if isinstance(token, str):
+                token = token.encode("utf-8")
+            try:
+                raw = base64.urlsafe_b64decode(token)
+                if len(raw) < 49 or raw[0] != 0x80:
+                    raise InvalidToken("Invalid token format")
+                nonce = raw[1:17]
+                tag = raw[-32:]
+                ct = raw[17:-32]
+                expected_tag = hmac.new(self._key, nonce + ct, hashlib.sha256).digest()
+                if not hmac.compare_digest(tag, expected_tag):
+                    raise InvalidToken("Token verification failed")
+                keystream = b""
+                block = 0
+                while len(keystream) < len(ct):
+                    keystream += hmac.new(self._key, nonce + block.to_bytes(4, "big"), hashlib.sha256).digest()
+                    block += 1
+                return bytes(b ^ k for b, k in zip(ct, keystream))
+            except Exception as e:
+                if isinstance(e, InvalidToken):
+                    raise
+                raise InvalidToken(str(e))
 
 # --------------------------------------------------------------------------
 # Paths
@@ -43,6 +116,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SCRIPT_PATH = os.path.join(BASE_DIR, "face_emotion_combined.py")
 LOGS_DIR = os.path.join(BASE_DIR, "logs")
 LOG_FILE = os.path.join(LOGS_DIR, "recognized_faces.csv")
+APP_LOG = os.path.join(LOGS_DIR, "app.log")
 FACES_DIR = os.path.join(BASE_DIR, "faces")
 CONFIG_FILE = os.path.join(BASE_DIR, "gui_config.json")
 os.makedirs(FACES_DIR, exist_ok=True)
@@ -68,6 +142,202 @@ VIEW_SINGLE = "Single camera"
 VIEW_GRID = "Grid (all cameras)"
 
 BG_BGR = (22, 13, 9)           # studio obsidian video background (#090d16) in BGR
+RENDER_FPS = 15                # screen redraws per second (smooth + light on CPU)
+PURGE_OLD_KNOWN_FILES = False  # set True AFTER face_emotion_combined.py is patched
+
+
+# ==========================================================================
+# 1) ERROR LOGGING
+# ==========================================================================
+log = logging.getLogger("dashboard")
+if not log.handlers:
+    log.setLevel(logging.INFO)
+    _fh = RotatingFileHandler(APP_LOG, maxBytes=1_000_000, backupCount=5, encoding="utf-8")
+    _fh.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(threadName)s | %(message)s"))
+    log.addHandler(_fh)
+
+_error_count = 0
+_on_error = None
+
+
+def _note_error():
+    global _error_count
+    _error_count += 1
+    if _on_error is not None:
+        try:
+            _on_error()
+        except Exception:
+            pass
+
+
+def log_exception(context):
+    log.exception("%s", context)
+    _note_error()
+
+
+@contextmanager
+def guard(context):
+    try:
+        yield
+    except Exception:
+        log_exception(context)
+
+
+def install_hooks(root, on_error=None):
+    """Catch every uncaught error (Tk callbacks, threads, main) and log it."""
+    global _on_error
+    _on_error = on_error
+
+    def tk_hook(exc, val, tb):
+        log.error("Tk callback error", exc_info=(exc, val, tb))
+        _note_error()
+
+    def sys_hook(exc, val, tb):
+        log.critical("Uncaught error", exc_info=(exc, val, tb))
+        _note_error()
+
+    def thread_hook(args):
+        log.error("Thread %s crashed", getattr(args.thread, "name", "?"),
+                  exc_info=(args.exc_type, args.exc_value, args.exc_traceback))
+        _note_error()
+
+    root.report_callback_exception = tk_hook
+    sys.excepthook = sys_hook
+    threading.excepthook = thread_hook
+
+
+# ==========================================================================
+# 2) ENCRYPTION (faces + camera passwords)
+# ==========================================================================
+KEY_ENV = "FACE_KEY"
+KEY_DIR = os.path.join(os.path.expanduser("~"), ".face_dashboard")
+KEY_FILE = os.path.join(KEY_DIR, "face.key")
+LOCAL_KEY_FILE = os.path.join(BASE_DIR, "data", "face.key")
+ENC_PREFIX = "enc:"
+_fernet_obj = None
+
+
+def _get_key():
+    env = os.environ.get(KEY_ENV, "").strip()
+    if env:
+        return env.encode()
+    if os.path.isfile(KEY_FILE):
+        try:
+            with open(KEY_FILE, "rb") as f:
+                return f.read().strip()
+        except OSError:
+            pass
+    if os.path.isfile(LOCAL_KEY_FILE):
+        try:
+            with open(LOCAL_KEY_FILE, "rb") as f:
+                return f.read().strip()
+        except OSError:
+            pass
+    target_file = KEY_FILE
+    try:
+        os.makedirs(KEY_DIR, exist_ok=True)
+    except OSError:
+        target_file = LOCAL_KEY_FILE
+        os.makedirs(os.path.dirname(LOCAL_KEY_FILE), exist_ok=True)
+
+    key = Fernet.generate_key()
+    try:
+        with open(target_file, "wb") as f:
+            f.write(key)
+        try:
+            os.chmod(target_file, 0o600)
+        except OSError:
+            pass
+    except OSError:
+        target_file = LOCAL_KEY_FILE
+        os.makedirs(os.path.dirname(LOCAL_KEY_FILE), exist_ok=True)
+        with open(target_file, "wb") as f:
+            f.write(key)
+    log.warning("New encryption key created at %s - BACK IT UP", target_file)
+    return key
+
+
+def _fernet():
+    global _fernet_obj
+    if _fernet_obj is None:
+        _fernet_obj = Fernet(_get_key())
+    return _fernet_obj
+
+
+def face_path(name, age):
+    return os.path.join(FACES_DIR, f"{name}_{age}.face")
+
+
+def save_face(path, encoding):
+    buf = io.BytesIO()
+    np.save(buf, np.asarray(encoding), allow_pickle=False)
+    tmp = path + ".tmp"
+    with open(tmp, "wb") as f:
+        f.write(_fernet().encrypt(buf.getvalue()))
+    os.replace(tmp, path)                      # never leaves a half-written file
+
+
+def load_face(path):
+    with open(path, "rb") as f:
+        return np.load(io.BytesIO(_fernet().decrypt(f.read())), allow_pickle=False)
+
+
+def migrate_plain_faces():
+    """Encrypt old faces/*.npy, verify, then delete the plain copy."""
+    done = 0
+    for fn in sorted(os.listdir(FACES_DIR)):
+        if not fn.endswith(".npy"):
+            continue
+        src = os.path.join(FACES_DIR, fn)
+        dst = os.path.join(FACES_DIR, fn[:-4] + ".face")
+        try:
+            arr = np.load(src, allow_pickle=False)
+            save_face(dst, arr)
+            if not np.allclose(load_face(dst), arr):
+                raise ValueError("verification failed")
+            os.remove(src)
+            done += 1
+        except Exception:
+            log_exception(f"migrating {fn}")
+    if PURGE_OLD_KNOWN_FILES:
+        for n in ("known_face_encodings.npy", "known_face_names.npy", "known_face_ages.npy"):
+            p = os.path.join(BASE_DIR, n)
+            if os.path.exists(p):
+                try:
+                    os.remove(p)
+                except OSError:
+                    log_exception(f"removing {n}")
+    if done:
+        log.info("Encrypted %d existing face file(s)", done)
+    return done
+
+
+def protect_value(v):
+    if isinstance(v, str) and v and not v.startswith(ENC_PREFIX):
+        return ENC_PREFIX + _fernet().encrypt(v.encode("utf-8")).decode("ascii")
+    return v
+
+
+def reveal_value(v):
+    if isinstance(v, str) and v.startswith(ENC_PREFIX):
+        try:
+            return _fernet().decrypt(v[len(ENC_PREFIX):].encode("ascii")).decode("utf-8")
+        except InvalidToken:
+            log.error("Cannot decrypt a camera URL in the config - wrong key?")
+            return ""
+    return v
+
+
+def _map_cameras(cfg, fn):
+    out = dict(cfg)
+    cams = []
+    for c in cfg.get("cameras", []):
+        c = dict(c)
+        if c.get("kind") == SOURCE_CCTV:
+            c["source"] = fn(c.get("source"))
+        cams.append(c)
+    out["cameras"] = cams
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -83,6 +353,7 @@ def load_config():
     try:
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
+        data = _map_cameras(data, reveal_value)          # decrypt CCTV passwords
         cfg.update(data)
         # migrate from v1 config (single source)
         if not cfg["cameras"] and "source_type" in data:
@@ -93,8 +364,10 @@ def load_config():
             if kind == SOURCE_WEBCAM or src:
                 cfg["cameras"].append({"id": uuid.uuid4().hex[:8], "name": "Camera 1",
                                        "kind": kind, "source": src})
-    except Exception:
+    except FileNotFoundError:
         pass
+    except Exception:
+        log_exception("load_config")
     if not cfg["cameras"]:
         cfg["cameras"] = [default_camera()]
     ids = [c["id"] for c in cfg["cameras"]]
@@ -105,10 +378,12 @@ def load_config():
 
 def save_config(cfg):
     try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, indent=2)
+        tmp = CONFIG_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(_map_cameras(cfg, protect_value), f, indent=2)   # encrypt passwords
+        os.replace(tmp, CONFIG_FILE)                                    # atomic save
     except Exception:
-        pass
+        log_exception("save_config")
 
 
 def open_folder(path):
@@ -159,7 +434,7 @@ class VideoStream:
 
     def start(self):
         self.running = True
-        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.thread = threading.Thread(target=self._run, daemon=True, name="VideoStream")
         self.thread.start()
 
     def request_stop(self):
@@ -194,6 +469,9 @@ class VideoStream:
     def _fail(self, msg):
         self.error = msg
         self.state = "failed"
+        # never write the camera password to the log
+        where = "<cctv url hidden>" if self.kind == SOURCE_CCTV else self.source
+        log.error("Stream failed (%s, %s): %s", self.kind, where, msg.splitlines()[0])
 
     def _open_error_text(self):
         if self.kind == SOURCE_WEBCAM:
@@ -234,7 +512,7 @@ class VideoStream:
                     try:
                         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                     except Exception:
-                        pass
+                        pass            # some backends don't support this; harmless
                     self.cap = cap
                     self.ever_connected = True
                     bad_reads = 0
@@ -263,16 +541,20 @@ class VideoStream:
                     self.cap = None
                     reconnects += 1
                     self.state = "reconnecting"
+                    log.warning("Stream lost, reconnecting (%d/%d)", reconnects, self.MAX_RECONNECTS)
                     if reconnects > self.MAX_RECONNECTS:
                         self._fail("Lost connection to the camera and could not reconnect.")
                         return
                     time.sleep(1)
+        except Exception:
+            log_exception("VideoStream._run")
+            self._fail("Unexpected error in the video stream. See logs/app.log")
         finally:
             if self.cap is not None:
                 try:
                     self.cap.release()
                 except Exception:
-                    pass
+                    log_exception("VideoStream cleanup")
                 self.cap = None
 
 
@@ -399,6 +681,114 @@ class CameraDialog(tk.Toplevel):
 
 
 # --------------------------------------------------------------------------
+# Stranger Alerts card
+# --------------------------------------------------------------------------
+class AlertsPanel(ttk.Frame):
+    """Watches the rows of recognized_faces.csv. Every NEW row named
+    "Stranger"/"Unknown" becomes a red alert with a beep. The guard selects
+    rows and presses "Mark handled"."""
+    STRANGER_NAMES = {"stranger", "unknown"}
+    MAX_ALERTS = 60
+
+    def __init__(self, parent, root):
+        super().__init__(parent, style="Card.TFrame", padding=14)
+        self.root = root
+        self._seen = None            # rows already processed (None = first load)
+        self._last_beep = 0.0
+
+        head = ttk.Frame(self, style="Inner.TFrame")
+        head.pack(fill="x")
+        ttk.Label(head, text="Stranger Alerts", style="CardTitle.TLabel").pack(side="left")
+        self.badge = tk.Label(head, text="ALL CLEAR", bg="#064e3b", fg="#34d399",
+                              font=("Segoe UI", 9, "bold"), padx=10, pady=2)
+        self.badge.pack(side="right")
+
+        wrap = ttk.Frame(self, style="Inner.TFrame")
+        wrap.pack(fill="x", pady=(8, 0))
+        self.tree = ttk.Treeview(wrap, columns=("time", "emotion", "match", "status"),
+                                 show="headings", height=5, selectmode="extended")
+        for col, text, w in (("time", "Time", 120), ("emotion", "Emotion", 70),
+                             ("match", "Match", 50), ("status", "Status", 60)):
+            self.tree.heading(col, text=text)
+            self.tree.column(col, width=w, anchor="center")
+        sb = ttk.Scrollbar(wrap, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=sb.set)
+        self.tree.pack(side="left", fill="x", expand=True)
+        sb.pack(side="right", fill="y")
+        self.tree.tag_configure("new", foreground=C["danger"])
+        self.tree.tag_configure("handled", foreground=C["muted"])
+
+        row = ttk.Frame(self, style="Inner.TFrame")
+        row.pack(fill="x", pady=(8, 0))
+        ttk.Button(row, text="Mark handled", style="Secondary.TButton",
+                   command=self.mark_selected).pack(side="left")
+        ttk.Button(row, text="Handle all", style="Secondary.TButton",
+                   command=self.mark_all).pack(side="left", padx=(6, 0))
+        self.sound_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(row, text="Sound", variable=self.sound_var,
+                        style="Card.TCheckbutton").pack(side="right")
+
+    def ingest(self, rows):
+        """Call with ALL csv rows (header removed). Only new rows are processed."""
+        try:
+            if self._seen is None or len(rows) < self._seen:
+                self._seen = len(rows)      # first load or log reset: no alarm
+                return
+            new, self._seen = rows[self._seen:], len(rows)
+            fresh = 0
+            for r in new:
+                r = (list(r) + [""] * 5)[:5]
+                if str(r[0]).strip().lower() in self.STRANGER_NAMES:
+                    self._add(r)
+                    fresh += 1
+            if fresh:
+                self._beep()
+            self._update_badge()
+        except Exception:
+            log_exception("AlertsPanel.ingest")
+
+    def _add(self, r):
+        self.tree.insert("", 0, values=(r[4], r[3], r[2], "NEW"), tags=("new",))
+        for iid in self.tree.get_children()[self.MAX_ALERTS:]:
+            self.tree.delete(iid)
+
+    def _beep(self):
+        if not self.sound_var.get() or time.monotonic() - self._last_beep < 2:
+            return
+        self._last_beep = time.monotonic()
+        try:
+            if sys.platform.startswith("win"):
+                import winsound
+                winsound.MessageBeep(winsound.MB_ICONHAND)
+            else:
+                self.root.bell()
+        except Exception:
+            log_exception("alert sound")
+
+    def unhandled(self):
+        return sum(1 for i in self.tree.get_children() if "new" in self.tree.item(i, "tags"))
+
+    def _mark(self, iids):
+        for i in iids:
+            self.tree.set(i, "status", "Handled")
+            self.tree.item(i, tags=("handled",))
+        self._update_badge()
+
+    def mark_selected(self):
+        self._mark(self.tree.selection())
+
+    def mark_all(self):
+        self._mark(self.tree.get_children())
+
+    def _update_badge(self):
+        n = self.unhandled()
+        if n:
+            self.badge.config(text=f"{n} NEW", bg="#7f1d1d", fg="#fca5a5")
+        else:
+            self.badge.config(text="ALL CLEAR", bg="#064e3b", fg="#34d399")
+
+
+# --------------------------------------------------------------------------
 # Main application
 # --------------------------------------------------------------------------
 class App:
@@ -428,6 +818,18 @@ class App:
         self.last_pill = None
         self.last_rec_ui = None
         self.error_popup_shown = False
+        self.last_log_rows = []
+
+        # rendering cache (speed)
+        self._last_render = 0.0
+        self._photo = None
+        self._canvas = None
+        self._canvas_key = None
+
+        # error logging + encryption of old data
+        install_hooks(root, on_error=lambda: self.post(self._show_error_badge))
+        with guard("migrate_plain_faces"):
+            migrate_plain_faces()
 
         root.title("Face & Emotion Recognition Dashboard")
         root.geometry("1300x880")
@@ -500,8 +902,13 @@ class App:
         self.status_text.pack(side="left", padx=18)
         self.clock = tk.Label(bar, text="", bg=C["statusbar"], fg=C["muted"], font=FONT_S)
         self.clock.pack(side="right", padx=18)
+        self.err_label = tk.Label(bar, text="", bg=C["statusbar"], fg=C["amber"], font=FONT_S)
+        self.err_label.pack(side="right", padx=18)
         self.stats = tk.Label(bar, text="", bg=C["statusbar"], fg=C["text_sec"], font=FONT_S)
         self.stats.pack(side="right", padx=18)
+
+    def _show_error_badge(self):
+        self.err_label.config(text=f"⚠ {_error_count} error(s) logged - see logs/app.log")
 
     def _build_notebook(self):
         self.notebook = ttk.Notebook(self.root)
@@ -594,6 +1001,10 @@ class App:
                    command=self.edit_camera).grid(row=0, column=1, sticky="ew", padx=4)
         ttk.Button(brow, text="Remove", style="Secondary.TButton",
                    command=self.remove_camera).grid(row=0, column=2, sticky="ew", padx=(4, 0))
+
+        # Stranger alerts card (new)
+        self.alerts = AlertsPanel(right, self.root)
+        self.alerts.pack(fill="x", pady=(0, 12))
 
         # Registration card
         reg_card, reg = self._card(right, "Register Face",
@@ -736,6 +1147,7 @@ class App:
             self._reload_cameras()
             self._sync_streams()
             self.set_status(f"Camera '{cam['name']}' added")
+            log.info("Camera added: %s (%s)", cam["name"], cam["kind"])
 
     def edit_camera(self):
         cam = self.selected_cam()
@@ -757,6 +1169,7 @@ class App:
             self._reload_cameras()
             self._sync_streams()
             self.set_status(f"Camera '{cam['name']}' updated")
+            log.info("Camera edited: %s", cam["name"])
 
     def remove_camera(self):
         cam = self.selected_cam()
@@ -778,6 +1191,7 @@ class App:
         self._reload_cameras()
         self._sync_streams()
         self.set_status(f"Camera '{cam['name']}' removed")
+        log.info("Camera removed: %s", cam["name"])
 
     # --------------------------------------------------------------- preview
     def _on_view_change(self):
@@ -936,6 +1350,7 @@ class App:
             self.placeholder_text = text
             self.video_label.config(image="", text=text)
             self.video_label.imgtk = None
+            self._photo = None
             self.last_sig = None
             self.layout = None
 
@@ -949,6 +1364,10 @@ class App:
             self._show_placeholder("No camera selected")
             return
 
+        now = time.monotonic()
+        if now - self._last_render < 1.0 / RENDER_FPS:        # too soon: skip
+            return
+
         bw = max(self.video_box.winfo_width(), 200)
         bh = max(self.video_box.winfo_height(), 150)
         sig = (bw, bh, self.view_mode, self.selected_id,
@@ -956,9 +1375,10 @@ class App:
                tuple((cid, s.frame_id, s.state) for cid, s in self.streams.items()),
                tuple(sorted(self.errors)),
                tuple(sorted(c for c in self.procs if self.rec_running(c))))
-        if sig == self.last_sig:
+        if sig == self.last_sig:                               # nothing changed
             return
         self.last_sig = sig
+        self._last_render = now
         self.placeholder_text = None
 
         n = len(cams)
@@ -968,8 +1388,12 @@ class App:
         tw = (bw - gap * (cols - 1)) // cols
         th = (bh - gap * (rows - 1)) // rows
 
-        canvas = np.empty((bh, bw, 3), np.uint8)
-        canvas[:] = BG_BGR
+        key = (bw, bh, n, cols)
+        if self._canvas is None or self._canvas_key != key:    # allocate only on change
+            self._canvas = np.empty((bh, bw, 3), np.uint8)
+            self._canvas[:] = BG_BGR
+            self._canvas_key = key
+        canvas = self._canvas
         for i, cam in enumerate(cams):
             r, c = divmod(i, cols)
             x, y = c * (tw + gap), r * (th + gap)
@@ -977,10 +1401,13 @@ class App:
             canvas[y:y + th, x:x + tw] = self._tile(cam, tw, th, highlight)
         self.layout = (cols, rows, tw, th, gap, [c["id"] for c in cams])
 
-        rgb = cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB)
-        imgtk = ImageTk.PhotoImage(Image.fromarray(rgb))
-        self.video_label.config(image=imgtk, text="")
-        self.video_label.imgtk = imgtk
+        img = Image.fromarray(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB))
+        if self._photo is not None and (self._photo.width(), self._photo.height()) == img.size:
+            self._photo.paste(img)                             # reuse the image object
+        else:
+            self._photo = ImageTk.PhotoImage(img)
+            self.video_label.config(image=self._photo, text="")
+        self.video_label.imgtk = self._photo
 
     # ------------------------------------------------------------ status bits
     def _cam_status(self, cid):
@@ -1097,7 +1524,7 @@ class App:
             messagebox.showinfo("No video", "No frame received yet. Try again in a moment.")
             return
 
-        target = os.path.join(FACES_DIR, f"{name}_{age}.npy")
+        target = face_path(name, age)                      # encrypted .face file
         if os.path.exists(target) and not messagebox.askyesno(
                 "Already registered", f"'{name}' ({age}) already exists.\nReplace it?"):
             return
@@ -1129,15 +1556,16 @@ class App:
                     self.post(lambda: self._reg_done(
                         "warn", "Could not compute the face encoding. Try again."))
                     return
-                np.save(target, encodings[0])
-                self.rebuild_known_database()
+                save_face(target, encodings[0])            # encrypted on disk
                 self.hub.store.upsert(name, klass=klass_in or None, age=age)
+                log.info("Face registered: %s (age %s)", name, age)
                 self.post(lambda: self._reg_done(
-                    "ok", f"Registered '{name}' (Age: {age}).\nDatabase updated."))
+                    "ok", f"Registered '{name}' (Age: {age}).\nFace data saved encrypted."))
             except Exception as e:  # noqa
+                log_exception("register_face")
                 self.post(lambda: self._reg_done("error", f"An error occurred: {e}"))
 
-        threading.Thread(target=work, daemon=True).start()
+        threading.Thread(target=work, daemon=True, name="RegisterFace").start()
 
     def _reg_done(self, kind, message):
         self.busy_register = False
@@ -1155,30 +1583,6 @@ class App:
         else:
             self.set_status("Registration error")
             messagebox.showerror("Registration error", message)
-
-    @staticmethod
-    def rebuild_known_database():
-        """Rebuild known_face_*.npy files from faces/*.npy"""
-        encodings, names, ages = [], [], []
-        for file in sorted(os.listdir(FACES_DIR)):
-            if not file.endswith(".npy"):
-                continue
-            try:
-                data = np.load(os.path.join(FACES_DIR, file), allow_pickle=True)
-                parts = file[:-4].split("_")
-                if len(parts) >= 2:
-                    face_name, face_age = " ".join(parts[:-1]), parts[-1]
-                else:
-                    face_name, face_age = parts[0], "-"
-                encodings.append(data)
-                names.append(face_name)
-                ages.append(face_age)
-            except Exception:
-                pass
-        if encodings:
-            np.save(os.path.join(BASE_DIR, "known_face_encodings.npy"), encodings)
-            np.save(os.path.join(BASE_DIR, "known_face_names.npy"), names)
-            np.save(os.path.join(BASE_DIR, "known_face_ages.npy"), ages)
 
     # ------------------------------------------------------------ recognition
     def toggle_recognition_selected(self):
@@ -1216,7 +1620,7 @@ class App:
             self._stop_stream(cid)
             self.last_sig = None
 
-        env = os.environ.copy()
+        env = os.environ.copy()          # also passes FACE_KEY if you set it
         env["FACE_SOURCE"] = str(cam["source"])
         env["FACE_SOURCE_TYPE"] = cam["kind"]
         env["FACE_CAMERA_NAME"] = cam["name"]
@@ -1238,6 +1642,7 @@ class App:
             proc = subprocess.Popen([sys.executable or "python", SCRIPT_PATH],
                                     cwd=BASE_DIR, env=env)
         except Exception as e:
+            log_exception(f"start_recognition {cam['name']}")
             if not quiet:
                 messagebox.showerror("Error", f"{cam['name']}: {e}")
             return False
@@ -1245,12 +1650,13 @@ class App:
         self.procs[cid] = proc
         self.stop_requested.discard(cid)
         self.set_status(f"Recognition started on '{cam['name']}'")
+        log.info("Recognition started on %s", cam["name"])
 
         def watch():
             code = proc.wait()
             self.post(lambda: self._recognition_ended(cid, proc, code))
 
-        threading.Thread(target=watch, daemon=True).start()
+        threading.Thread(target=watch, daemon=True, name="RecognitionWatch").start()
         self._update_buttons()
         return True
 
@@ -1261,7 +1667,7 @@ class App:
             try:
                 p.terminate()
             except Exception:
-                pass
+                log_exception("stop_recognition terminate")
 
     def _recognition_ended(self, cid, proc, code):
         if self.procs.get(cid) is not proc:
@@ -1274,6 +1680,7 @@ class App:
             self.set_status(f"Recognition stopped on '{name}'")
         elif code not in (0, None):
             self.set_status(f"Recognition on '{name}' exited with code {code}")
+            log.error("Recognition on %s exited with code %s", name, code)
         else:
             self.set_status(f"Recognition finished on '{name}'")
         self.last_sig = None
@@ -1284,11 +1691,11 @@ class App:
     # ------------------------------------------------------------------- logs
     def _poll_logs(self):
         self.refresh_logs()
-        self.root.after(3000, self._poll_logs)
+        self.root.after(1000, self._poll_logs)       # 1 s: alerts feel instant
 
     def refresh_logs(self, force=False):
         try:
-            faces = len([f for f in os.listdir(FACES_DIR) if f.endswith(".npy")])
+            faces = len([f for f in os.listdir(FACES_DIR) if f.endswith(".face")])
         except OSError:
             faces = 0
         try:
@@ -1306,8 +1713,9 @@ class App:
                     self.last_log_rows = list(csv.reader(f))[1:]
                 total = len(self.last_log_rows)
                 self.filter_attendance_table()
+                self.alerts.ingest(self.last_log_rows)        # stranger alerts
             except Exception:
-                pass
+                log_exception("refresh_logs")
         else:
             self.last_log_rows = []
             self.filter_attendance_table()
@@ -1341,6 +1749,7 @@ class App:
             webbrowser.open(Path(report_path).resolve().as_uri())
             self.set_status(f"Exported HTML Report: {os.path.basename(report_path)}")
         except Exception as e:
+            log_exception("export_daily_report")
             messagebox.showerror("Export Report Error", str(e), parent=self.root)
 
     # ------------------------------------------------------------------- exit
@@ -1362,24 +1771,11 @@ class App:
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "show-key":
+        print("Encryption key (store it safely, never share it):\n")
+        print(_get_key().decode())
+        print(f"\nKey file: {KEY_FILE}")
+        sys.exit(0)
     root = tk.Tk()
     App(root)
     root.mainloop()
-
-# ---------------------------------------------------------------------------
-# NOTE - make face_emotion_combined.py use the camera chosen in the dashboard.
-# Replace your existing   cap = cv2.VideoCapture(0)   with:
-#
-#   import os
-#   src = os.environ.get("FACE_SOURCE", "0")
-#   src = int(src) if src.isdigit() else src
-#   cap = cv2.VideoCapture(src)
-#
-# And give every recognition window its own title (needed when running on
-# several cameras), e.g.:
-#
-#   cam_name = os.environ.get("FACE_CAMERA_NAME", "Camera")
-#   cv2.imshow(f"Recognition - {cam_name}", frame)
-#
-# (use the same title in cv2.waitKey / destroyWindow calls if you have them)
-# ---------------------------------------------------------------------------

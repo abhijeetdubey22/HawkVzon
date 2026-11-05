@@ -216,9 +216,10 @@ class StudentStore:
         except OSError:
             return
         for file in files:
-            if not file.endswith(".npy"):
+            if not file.endswith((".face", ".npy")):
                 continue
-            parts = file[:-4].split("_")
+            base = file[:-5] if file.endswith(".face") else file[:-4]
+            parts = base.split("_")
             name = " ".join(parts[:-1]) if len(parts) >= 2 else parts[0]
             age = parts[-1] if len(parts) >= 2 else ""
             if self.key(name) not in self.students:
@@ -1588,8 +1589,11 @@ class SchoolHub:
     def has_face(self, name):
         try:
             for f in os.listdir(FACES_DIR):
-                if f.endswith(".npy") and norm(" ".join(f[:-4].split("_")[:-1])) == norm(name):
-                    return True
+                if f.endswith((".face", ".npy")):
+                    base = f[:-5] if f.endswith(".face") else f[:-4]
+                    fname = " ".join(base.split("_")[:-1]) if len(base.split("_")) >= 2 else base.split("_")[0]
+                    if norm(fname) == norm(name):
+                        return True
         except OSError:
             pass
         return False
@@ -1598,8 +1602,9 @@ class SchoolHub:
         removed = 0
         try:
             for f in os.listdir(FACES_DIR):
-                if f.endswith(".npy"):
-                    parts = f[:-4].split("_")
+                if f.endswith((".face", ".npy")):
+                    base = f[:-5] if f.endswith(".face") else f[:-4]
+                    parts = base.split("_")
                     fname = " ".join(parts[:-1]) if len(parts) >= 2 else parts[0]
                     if norm(fname) == norm(name):
                         os.remove(os.path.join(FACES_DIR, f))
@@ -1608,9 +1613,13 @@ class SchoolHub:
             pass
         self.store.delete(key)
         if removed:
-            self.app.rebuild_known_database()
+            if hasattr(self.app, "rebuild_known_database"):
+                try:
+                    self.app.rebuild_known_database()
+                except Exception:
+                    pass
             # if that was the last face, clear the combined database too
-            if not any(f.endswith(".npy") for f in os.listdir(FACES_DIR)):
+            if not any(f.endswith((".face", ".npy")) for f in os.listdir(FACES_DIR)):
                 for n in ("known_face_encodings.npy", "known_face_names.npy", "known_face_ages.npy"):
                     try:
                         os.remove(os.path.join(BASE_DIR, n))
