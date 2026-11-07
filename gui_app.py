@@ -712,8 +712,8 @@ class AlertsPanel(ttk.Frame):
         head = ttk.Frame(self, style="Inner.TFrame")
         head.pack(fill="x")
         ttk.Label(head, text="Stranger Alerts", style="CardTitle.TLabel").pack(side="left")
-        self.badge = tk.Label(head, text="ALL CLEAR", bg="#064e3b", fg="#34d399",
-                              font=("Segoe UI", 9, "bold"), padx=10, pady=2)
+        self.badge = tk.Label(head, text="ALL CLEAR", bg="#122319", fg="#34d399",
+                              font=("Segoe UI", 8, "bold"), padx=10, pady=2)
         self.badge.pack(side="right")
 
         wrap = ttk.Frame(self, style="Inner.TFrame")
@@ -796,9 +796,9 @@ class AlertsPanel(ttk.Frame):
     def _update_badge(self):
         n = self.unhandled()
         if n:
-            self.badge.config(text=f"{n} NEW", bg="#7f1d1d", fg="#fca5a5")
+            self.badge.config(text=f"{n} NEW", bg="#291316", fg="#f87171")
         else:
-            self.badge.config(text="ALL CLEAR", bg="#064e3b", fg="#34d399")
+            self.badge.config(text="ALL CLEAR", bg="#122319", fg="#34d399")
 
 
 class VisitorsModal:
@@ -857,24 +857,24 @@ class VisitorsModal:
         btn_row.pack(fill="x", pady=(2, 6))
 
         ttk.Label(btn_row, text="Quick Presets:", style="Card.TLabel").pack(side="left", padx=(0, 8))
-        ttk.Button(btn_row, text="+30 Mins", style="Primary.TButton",
+        ttk.Button(btn_row, text="+30 Mins", style="Secondary.TButton",
                    command=lambda: self.extend_time(30)).pack(side="left", padx=3)
-        ttk.Button(btn_row, text="+50 Mins", style="Primary.TButton",
+        ttk.Button(btn_row, text="+50 Mins", style="Secondary.TButton",
                    command=lambda: self.extend_time(50)).pack(side="left", padx=3)
-        ttk.Button(btn_row, text="+1 Hour", style="Primary.TButton",
+        ttk.Button(btn_row, text="+1 Hour", style="Secondary.TButton",
                    command=lambda: self.extend_time(60)).pack(side="left", padx=3)
 
         ttk.Label(btn_row, text="  Custom Minutes:", style="Card.TLabel").pack(side="left", padx=(10, 6))
         self.custom_entry = ttk.Entry(btn_row, width=6)
         self.custom_entry.insert(0, "45")
         self.custom_entry.pack(side="left", padx=(0, 6))
-        ttk.Button(btn_row, text="Apply Time", style="Success.TButton",
+        ttk.Button(btn_row, text="Apply Time", style="Primary.TButton",
                    command=self.apply_custom_time).pack(side="left", padx=3)
 
-        ttk.Button(btn_row, text="📍 View Breadcrumbs", style="Violet.TButton",
+        ttk.Button(btn_row, text="📍 View Breadcrumbs", style="Secondary.TButton",
                    command=self.view_breadcrumbs).pack(side="right")
 
-        self.status_lbl = tk.Label(act_inner, text="", bg=C["card"], fg=C["primary"], font=FONT_S)
+        self.status_lbl = tk.Label(act_inner, text="", bg=C["card"], fg=C["text_sec"], font=FONT_S)
         self.status_lbl.pack(anchor="w", pady=(4, 0))
 
         self.load_visitors()
@@ -1105,21 +1105,21 @@ class App:
         right.pack(side="right", padx=24)
         tk.Label(right, text="Recognition:", bg=C["header"], fg=C["subtle"],
                  font=FONT_S).pack(side="left", padx=(0, 10))
-        self.rec_pill = tk.Label(right, text="● STOPPED", bg="#1e293b", fg="#94a3b8",
-                                 font=("Segoe UI", 9, "bold"), padx=14, pady=5)
+        self.rec_pill = tk.Label(right, text="● STOPPED", bg="#141418", fg="#71717a",
+                                 font=("Segoe UI", 8, "bold"), padx=12, pady=4)
         self.rec_pill.pack(side="left")
-        tk.Button(right, text="🎫 Guest Passes", command=self.open_visitors_modal, bg="#1e293b",
-                  fg="#38bdf8", activebackground="#334155", activeforeground="#ffffff",
+        tk.Button(right, text="🎫 Guest Passes", command=self.open_visitors_modal, bg="#18181d",
+                  fg="#f4f4f5", activebackground="#26262e", activeforeground="#ffffff",
                   relief="flat", font=FONT_S, padx=12, pady=4,
-                  cursor="hand2", bd=0).pack(side="left", padx=(10, 0))
-        tk.Button(right, text="🌐 Web Portal", command=self.open_web_portal, bg="#1e293b",
-                  fg="#34d399", activebackground="#334155", activeforeground="#ffffff",
+                  cursor="hand2", bd=0, highlightthickness=1, highlightbackground="#27272e").pack(side="left", padx=(10, 0))
+        tk.Button(right, text="🌐 Web Portal", command=self.open_web_portal, bg="#18181d",
+                  fg="#f4f4f5", activebackground="#26262e", activeforeground="#ffffff",
                   relief="flat", font=FONT_S, padx=12, pady=4,
-                  cursor="hand2", bd=0).pack(side="left", padx=(8, 0))
-        tk.Button(right, text="🔒 PIN", command=lambda: self.hub.change_pin(), bg=C["card_sub"],
-                  fg=C["text"], activebackground=C["border"], activeforeground="#ffffff",
+                  cursor="hand2", bd=0, highlightthickness=1, highlightbackground="#27272e").pack(side="left", padx=(8, 0))
+        tk.Button(right, text="🔒 PIN", command=lambda: self.hub.change_pin(), bg="#18181d",
+                  fg="#f4f4f5", activebackground="#26262e", activeforeground="#ffffff",
                   relief="flat", font=FONT_S, padx=12, pady=4,
-                  cursor="hand2", bd=0).pack(side="left", padx=(12, 0))
+                  cursor="hand2", bd=0, highlightthickness=1, highlightbackground="#27272e").pack(side="left", padx=(8, 0))
 
     def _build_statusbar(self):
         # Hairline top border for status bar
@@ -1161,13 +1161,13 @@ class App:
         self.kpi_present = Kpi(kpi_wrap, "Students Present", "#10b981", sub="Tracking enrolled roster")
         self.kpi_present.grid(row=0, column=0, sticky="ew", padx=(0, 6))
 
-        self.kpi_absent = Kpi(kpi_wrap, "Campus Absentees", "#f43f5e", sub="Awaiting arrival scan")
+        self.kpi_absent = Kpi(kpi_wrap, "Campus Absentees", "#71717a", sub="Awaiting arrival scan")
         self.kpi_absent.grid(row=0, column=1, sticky="ew", padx=4)
 
-        self.kpi_mood = Kpi(kpi_wrap, "Wellbeing Index", "#a855f7", sub="FACS Geometric AU")
+        self.kpi_mood = Kpi(kpi_wrap, "Wellbeing Index", "#3b82f6", sub="FACS Geometric AU")
         self.kpi_mood.grid(row=0, column=2, sticky="ew", padx=4)
 
-        self.kpi_radar = Kpi(kpi_wrap, "Perimeter Radar", "#0ea5e9", sub="Live Perimeter Scan")
+        self.kpi_radar = Kpi(kpi_wrap, "Perimeter Radar", "#f59e0b", sub="Live Perimeter Scan")
         self.kpi_radar.grid(row=0, column=3, sticky="ew", padx=(6, 0))
 
     def _build_body(self, parent):
@@ -1184,17 +1184,17 @@ class App:
         video_card, video_body = self._card(body, "Live Preview")
         video_card.grid(row=0, column=0, sticky="nsew", padx=(0, 14), pady=(0, 12))
 
-        self.status_pill = tk.Label(video_card, text="● NO SIGNAL", bg="#1e293b", fg="#94a3b8",
-                                    font=("Segoe UI", 9, "bold"), padx=12, pady=4)
+        self.status_pill = tk.Label(video_card, text="● NO SIGNAL", bg="#141418", fg="#71717a",
+                                    font=("Segoe UI", 8, "bold"), padx=10, pady=3)
         self.status_pill.place(relx=1.0, x=-14, y=14, anchor="ne")
 
         toolbar = ttk.Frame(video_body, style="Inner.TFrame")
         toolbar.pack(fill="x", pady=(0, 8))
         self.btn_prev_start = ttk.Button(toolbar, text="▶  Start Preview",
-                                         style="Success.TButton", command=self.start_preview)
+                                         style="Primary.TButton", command=self.start_preview)
         self.btn_prev_start.pack(side="left")
         self.btn_prev_stop = ttk.Button(toolbar, text="■  Stop Preview",
-                                        style="Danger.TButton", command=self.stop_preview)
+                                        style="Secondary.TButton", command=self.stop_preview)
         self.btn_prev_stop.pack(side="left", padx=(8, 0))
         self.btn_prev_stop.state(["disabled"])
 
@@ -1206,7 +1206,7 @@ class App:
 
         # Full Screen Toggle Button
         self.btn_fullscreen = ttk.Button(toolbar, text="⛶  Full Screen (F11)",
-                                         style="Primary.TButton", command=self.toggle_fullscreen)
+                                         style="Secondary.TButton", command=self.toggle_fullscreen)
         self.btn_fullscreen.pack(side="left")
 
         self.view_var = tk.StringVar(value=self.view_mode)
@@ -1306,14 +1306,14 @@ class App:
         self.class_combo = ttk.Combobox(reg, textvariable=self.class_var, values=[])
         self.class_combo.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(2, 10))
         self.btn_register = ttk.Button(reg, text="Register Current Face",
-                                       style="Success.TButton", command=self.register_face)
+                                       style="Primary.TButton", command=self.register_face)
         self.btn_register.grid(row=4, column=0, columnspan=2, sticky="ew")
 
         # Recognition card
         act_card, act = self._card(right, "Recognition")
         act_card.pack(fill="x")
         self.btn_rec_sel = ttk.Button(act, text="Start Recognition (selected camera)",
-                                      style="Violet.TButton", command=self.toggle_recognition_selected)
+                                      style="Primary.TButton", command=self.toggle_recognition_selected)
         self.btn_rec_sel.pack(fill="x")
         self.btn_rec_all = ttk.Button(act, text="Start on All Cameras",
                                       style="Secondary.TButton", command=self.toggle_recognition_all)
@@ -1326,7 +1326,7 @@ class App:
         ttk.Checkbutton(act, text="Outdoor / Long-Range Mode (25+ ft)",
                         variable=self.long_range_var,
                         style="Card.TCheckbutton").pack(anchor="w", pady=(4, 0))
-        ttk.Button(act, text="📊 Export Daily Report (HTML)", style="Primary.TButton",
+        ttk.Button(act, text="📊 Export Daily Report (HTML)", style="Secondary.TButton",
                    command=self.export_daily_report).pack(fill="x", pady=(8, 0))
         ttk.Button(act, text="Open Logs & Snapshots", style="Secondary.TButton",
                    command=lambda: open_folder(LOGS_DIR)).pack(fill="x", pady=(8, 0))
@@ -1360,12 +1360,12 @@ class App:
         self.tree.configure(yscrollcommand=sb.set)
         self.tree.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
-        self.tree.tag_configure("odd", background="#0d1424", foreground=C["text"])
-        self.tree.tag_configure("even", background="#131c31", foreground=C["text"])
-        self.tree.tag_configure("stranger_even", background="#131c31", foreground=C["amber"])
-        self.tree.tag_configure("stranger_odd", background="#0d1424", foreground=C["amber"])
-        self.tree.tag_configure("known_even", background="#131c31", foreground=C["success"])
-        self.tree.tag_configure("known_odd", background="#0d1424", foreground=C["success"])
+        self.tree.tag_configure("odd", background="#0d0d10", foreground=C["text"])
+        self.tree.tag_configure("even", background="#121216", foreground=C["text"])
+        self.tree.tag_configure("stranger_even", background="#121216", foreground=C["amber"])
+        self.tree.tag_configure("stranger_odd", background="#0d0d10", foreground=C["amber"])
+        self.tree.tag_configure("known_even", background="#121216", foreground=C["success"])
+        self.tree.tag_configure("known_odd", background="#0d0d10", foreground=C["success"])
 
     # ---------------------------------------------------------------- helpers
     def post(self, fn):
@@ -2101,20 +2101,20 @@ class App:
 
     def _update_pill(self):
         if not self.previewing:
-            pill = ("● NO SIGNAL", "#1e293b", "#94a3b8")
+            pill = ("● NO SIGNAL", "#141418", "#71717a")
         else:
             shown = [c["id"] for c in self._shown_cams()]
             states = [self.streams[c].state for c in shown if c in self.streams]
             live = states.count("live")
             if live:
                 txt = "● LIVE" if len(shown) == 1 else f"● LIVE {live}/{len(shown)}"
-                pill = (txt, "#064e3b", "#34d399")
+                pill = (txt, "#122319", "#34d399")
             elif states:
-                pill = ("● CONNECTING…", "#78350f", "#fde68a")
+                pill = ("● CONNECTING…", "#251c11", "#fbbf24")
             elif any(c in self.errors for c in shown):
-                pill = ("● FAILED", "#7f1d1d", "#fca5a5")
+                pill = ("● FAILED", "#291316", "#f87171")
             else:
-                pill = ("● NO SIGNAL", "#1e293b", "#94a3b8")
+                pill = ("● NO SIGNAL", "#141418", "#71717a")
         if pill != self.last_pill:
             self.last_pill = pill
             self.status_pill.config(text=pill[0], bg=pill[1], fg=pill[2])
@@ -2127,9 +2127,9 @@ class App:
             return
         self.last_rec_ui = key
         if running:
-            self.rec_pill.config(text=f"● RUNNING ({len(running)})", bg="#064e3b", fg="#34d399")
+            self.rec_pill.config(text=f"● RUNNING ({len(running)})", bg="#122319", fg="#34d399")
         else:
-            self.rec_pill.config(text="● STOPPED", bg="#1e293b", fg="#94a3b8")
+            self.rec_pill.config(text="● STOPPED", bg="#141418", fg="#71717a")
         self._update_buttons()
 
     # -------------------------------------------------------------- main loop
