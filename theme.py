@@ -212,14 +212,14 @@ def fill_tree(tree, rows, sigs, key):
 class Kpi(tk.Frame):
     """Executive statistic tile: top accent strip, uppercase caption with dot, high-contrast metric."""
 
-    def __init__(self, parent, title, color):
+    def __init__(self, parent, title, color, sub=None, font_metric=None):
         super().__init__(parent, bg=C["card"], highlightbackground=C["border"],
                          highlightthickness=1, bd=0)
         # 3px top accent bar
         tk.Frame(self, bg=color, height=3).pack(side="top", fill="x")
         
         inner = tk.Frame(self, bg=C["card"])
-        inner.pack(fill="both", expand=True, padx=14, pady=10)
+        inner.pack(fill="both", expand=True, padx=14, pady=9)
         
         header_row = tk.Frame(inner, bg=C["card"])
         header_row.pack(fill="x", anchor="w")
@@ -228,12 +228,19 @@ class Kpi(tk.Frame):
         tk.Label(header_row, text=title.upper(), font=("Segoe UI", 8, "bold"),
                  bg=C["card"], fg=C["muted"]).pack(side="left")
                  
-        self.value = tk.Label(inner, text="0", font=FONT_METRIC,
+        f_val = font_metric if font_metric else ("Segoe UI", 16, "bold")
+        self.value = tk.Label(inner, text="0", font=f_val,
                               bg=C["card"], fg=C["text"])
-        self.value.pack(anchor="w", pady=(3, 0))
+        self.value.pack(anchor="w", pady=(2, 0))
 
-    def set(self, v):
+        self.sub_label = tk.Label(inner, text=sub or "", font=("Segoe UI", 8),
+                                  bg=C["card"], fg=C["subtle"])
+        self.sub_label.pack(anchor="w", pady=(1, 0))
+
+    def set(self, v, sub=None):
         self.value.config(text=str(v))
+        if sub is not None:
+            self.sub_label.config(text=str(sub))
 
 
 class ScrollFrame(tk.Frame):

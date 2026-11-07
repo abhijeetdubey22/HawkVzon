@@ -19,3 +19,4 @@ echo [WATCHDOG] Restarting server automatically in 5 seconds...
 echo Press Ctrl+C if you wish to stop the watchdog completely.
 timeout /t 5
 goto loop
+

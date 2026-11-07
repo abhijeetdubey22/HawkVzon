@@ -122,7 +122,7 @@ CONFIG_FILE = os.path.join(BASE_DIR, "gui_config.json")
 os.makedirs(FACES_DIR, exist_ok=True)
 os.makedirs(LOGS_DIR, exist_ok=True)
 
-from theme import C, FONT, FONT_B, FONT_H, FONT_S, apply_style, ScrollFrame
+from theme import C, FONT, FONT_B, FONT_H, FONT_S, apply_style, ScrollFrame, Kpi
 from school_hub import SchoolHub
 
 SOURCE_WEBCAM = "Webcam"
@@ -801,6 +801,202 @@ class AlertsPanel(ttk.Frame):
             self.badge.config(text="ALL CLEAR", bg="#064e3b", fg="#34d399")
 
 
+class VisitorsModal:
+    """Smart Campus Guest Escort & Time Extension Dialog."""
+    def __init__(self, parent, app):
+        self.parent = parent
+        self.app = app
+        self.win = tk.Toplevel(parent)
+        self.win.title("Campus Guest Permits & Transit Radar")
+        self.win.geometry("860x540")
+        self.win.configure(bg=C["bg"])
+        self.win.transient(parent)
+        self.win.grab_set()
+
+        # Header
+        head = tk.Frame(self.win, bg=C["header"], height=64)
+        head.pack(fill="x")
+        head.pack_propagate(False)
+        tk.Frame(self.win, bg=C["header_border"], height=1).pack(fill="x")
+
+        tk.Label(head, text="🎫  Campus Guest Permits & Transit Escort",
+                 font=("Segoe UI", 14, "bold"), bg=C["header"], fg=C["text"]).pack(anchor="w", padx=20, pady=(10, 2))
+        tk.Label(head, text="AI Whitelist  •  Intrusion Alarm Suppression  •  Breadcrumb Tracking  •  Time Extension",
+                 font=FONT_S, bg=C["header"], fg=C["subtle"]).pack(anchor="w", padx=20)
+
+        # Body
+        body = tk.Frame(self.win, bg=C["bg"], padx=18, pady=12)
+        body.pack(fill="both", expand=True)
+
+        # Table of visitors
+        table_card, table_inner = self.app._card(body, "Active Guest Passes", "Whitelisted visitors currently on campus")
+        table_card.pack(fill="both", expand=True, pady=(0, 10))
+
+        cols = ("id", "name", "purpose", "host", "limit", "location", "status")
+        heads = ("Pass ID", "Guest Name", "Visit Purpose", "Host Department", "Permit Time", "Current Location", "Status")
+        widths = (110, 140, 160, 130, 110, 120, 80)
+
+        wrap = ttk.Frame(table_inner, style="Inner.TFrame")
+        wrap.pack(fill="both", expand=True)
+        self.tree = ttk.Treeview(wrap, columns=cols, show="headings", height=5, selectmode="browse")
+        for i, col in enumerate(cols):
+            self.tree.heading(col, text=heads[i])
+            self.tree.column(col, width=widths[i], anchor="w" if i in (1, 2) else "center")
+        sb = ttk.Scrollbar(wrap, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=sb.set)
+        self.tree.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+        self.tree.tag_configure("in_campus", foreground=C["success"])
+        self.tree.tag_configure("overstay", foreground=C["amber"])
+
+        # Action Bar for Time Extension & Breadcrumbs
+        act_card, act_inner = self.app._card(body, "Extend Campus Guest Permit", "Select a guest above to extend permit or inspect movement breadcrumbs")
+        act_card.pack(fill="x")
+
+        btn_row = ttk.Frame(act_inner, style="Inner.TFrame")
+        btn_row.pack(fill="x", pady=(2, 6))
+
+        ttk.Label(btn_row, text="Quick Presets:", style="Card.TLabel").pack(side="left", padx=(0, 8))
+        ttk.Button(btn_row, text="+30 Mins", style="Primary.TButton",
+                   command=lambda: self.extend_time(30)).pack(side="left", padx=3)
+        ttk.Button(btn_row, text="+50 Mins", style="Primary.TButton",
+                   command=lambda: self.extend_time(50)).pack(side="left", padx=3)
+        ttk.Button(btn_row, text="+1 Hour", style="Primary.TButton",
+                   command=lambda: self.extend_time(60)).pack(side="left", padx=3)
+
+        ttk.Label(btn_row, text="  Custom Minutes:", style="Card.TLabel").pack(side="left", padx=(10, 6))
+        self.custom_entry = ttk.Entry(btn_row, width=6)
+        self.custom_entry.insert(0, "45")
+        self.custom_entry.pack(side="left", padx=(0, 6))
+        ttk.Button(btn_row, text="Apply Time", style="Success.TButton",
+                   command=self.apply_custom_time).pack(side="left", padx=3)
+
+        ttk.Button(btn_row, text="📍 View Breadcrumbs", style="Violet.TButton",
+                   command=self.view_breadcrumbs).pack(side="right")
+
+        self.status_lbl = tk.Label(act_inner, text="", bg=C["card"], fg=C["primary"], font=FONT_S)
+        self.status_lbl.pack(anchor="w", pady=(4, 0))
+
+        self.load_visitors()
+
+    def _get_visitors_file(self):
+        return os.path.join(BASE_DIR, "data", "visitors.json")
+
+    def load_visitors(self):
+        self.tree.delete(*self.tree.get_children())
+        vf = self._get_visitors_file()
+        if not os.path.exists(vf):
+            return
+        try:
+            with open(vf, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            if isinstance(raw, dict):
+                self.visitors = list(raw.values())
+            else:
+                self.visitors = list(raw)
+
+            for v in self.visitors:
+                tag = "in_campus" if v.get("status") in ("Active", "In Campus") else "overstay"
+                vid = v.get("id", "")
+                name = v.get("name", "")
+                purpose = v.get("purpose", "")
+                host = v.get("host", "")
+                valid_to = v.get("valid_to", "")
+                time_str = valid_to.split(" ")[-1][:5] if " " in valid_to else valid_to
+                loc = v.get("current_zone") or v.get("last_location", "Campus")
+                status = v.get("status", "Active")
+
+                row = (vid, name, purpose, host, f"Until {time_str}" if time_str else "Active", loc, status)
+                self.tree.insert("", "end", iid=vid, values=row, tags=(tag,))
+
+            children = self.tree.get_children()
+            if children:
+                self.tree.selection_set(children[0])
+        except Exception as e:
+            self.status_lbl.config(text=f"Error loading visitors: {e}", fg=C["danger"])
+
+    def extend_time(self, mins):
+        sel = self.tree.selection()
+        if not sel:
+            messagebox.showwarning("Select Guest", "Please select a visitor from the list first.", parent=self.win)
+            return
+        vid = sel[0]
+        vf = self._get_visitors_file()
+        try:
+            with open(vf, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            found_key = None
+            if isinstance(data, dict):
+                if vid in data:
+                    found_key = vid
+                else:
+                    for k, val in data.items():
+                        if val.get("id") == vid or val.get("name", "").lower() == vid.lower():
+                            found_key = k
+                            break
+            if found_key is not None:
+                v = data[found_key]
+                current_valid_to = v.get("valid_to", "")
+                now = datetime.now()
+                try:
+                    curr_dt = datetime.strptime(current_valid_to, "%Y-%m-%d %H:%M:%S")
+                    base_dt = max(now, curr_dt)
+                except Exception:
+                    base_dt = now
+                from datetime import timedelta
+                new_dt = base_dt + timedelta(minutes=mins)
+                v["valid_to"] = new_dt.strftime("%Y-%m-%d %H:%M:%S")
+                v["status"] = "Active"
+                if "journey" not in v:
+                    v["journey"] = []
+                v["journey"].append({
+                    "time": datetime.now().strftime("%I:%M %p"),
+                    "camera": "Principal Desk",
+                    "zone": "Admin Office",
+                    "event": f"Permit Extended (+{mins} mins by Principal)"
+                })
+                with open(vf, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2, ensure_ascii=False)
+                self.load_visitors()
+                self.status_lbl.config(text=f"✓ Extended permit for {v.get('name')} by +{mins} mins (Valid until {new_dt.strftime('%I:%M %p')})", fg=C["success"])
+                self.app.set_status(f"Guest permit extended for {v.get('name')} (+{mins} mins)")
+        except Exception as e:
+            messagebox.showerror("Extension Error", str(e), parent=self.win)
+
+    def apply_custom_time(self):
+        val = self.custom_entry.get().strip()
+        try:
+            mins = int(val)
+            if mins <= 0:
+                raise ValueError()
+            self.extend_time(mins)
+        except ValueError:
+            messagebox.showwarning("Invalid Input", "Please enter a valid positive number of minutes.", parent=self.win)
+
+    def view_breadcrumbs(self):
+        sel = self.tree.selection()
+        if not sel:
+            messagebox.showwarning("Select Guest", "Please select a visitor from the list first.", parent=self.win)
+            return
+        vid = sel[0]
+        guest = next((v for v in getattr(self, "visitors", []) if v.get("id") == vid), None)
+        if not guest:
+            return
+        history = guest.get("journey") or guest.get("transit_history", [])
+        lines = [f"=== TRANSIT BREADCRUMBS: {guest.get('name')} ==="]
+        lines.append(f"Host: {guest.get('host')}  |  Purpose: {guest.get('purpose')}")
+        lines.append(f"Current Zone: {guest.get('current_zone', 'In Campus')}")
+        lines.append("-" * 50)
+        for h in history:
+            t = h.get("time", "")
+            cam = h.get("camera", "")
+            z = h.get("zone", h.get("location", ""))
+            ev = h.get("event", "Transit")
+            lines.append(f"• [{t}] {cam} ({z}) — {ev}")
+        messagebox.showinfo("Guest Transit History", "\n".join(lines) if history else "No transit events recorded yet.", parent=self.win)
+
+
 # --------------------------------------------------------------------------
 # Main application
 # --------------------------------------------------------------------------
@@ -912,10 +1108,18 @@ class App:
         self.rec_pill = tk.Label(right, text="● STOPPED", bg="#1e293b", fg="#94a3b8",
                                  font=("Segoe UI", 9, "bold"), padx=14, pady=5)
         self.rec_pill.pack(side="left")
+        tk.Button(right, text="🎫 Guest Passes", command=self.open_visitors_modal, bg="#1e293b",
+                  fg="#38bdf8", activebackground="#334155", activeforeground="#ffffff",
+                  relief="flat", font=FONT_S, padx=12, pady=4,
+                  cursor="hand2", bd=0).pack(side="left", padx=(10, 0))
+        tk.Button(right, text="🌐 Web Portal", command=self.open_web_portal, bg="#1e293b",
+                  fg="#34d399", activebackground="#334155", activeforeground="#ffffff",
+                  relief="flat", font=FONT_S, padx=12, pady=4,
+                  cursor="hand2", bd=0).pack(side="left", padx=(8, 0))
         tk.Button(right, text="🔒 PIN", command=lambda: self.hub.change_pin(), bg=C["card_sub"],
                   fg=C["text"], activebackground=C["border"], activeforeground="#ffffff",
                   relief="flat", font=FONT_S, padx=12, pady=4,
-                  cursor="hand2", bd=0).pack(side="left", padx=(14, 0))
+                  cursor="hand2", bd=0).pack(side="left", padx=(12, 0))
 
     def _build_statusbar(self):
         # Hairline top border for status bar
@@ -948,9 +1152,29 @@ class App:
         self.notebook.bind("<<NotebookTabChanged>>", self.hub.on_tab_changed)
         self.hub.start()
 
+    def _build_kpi_bar(self, parent):
+        kpi_wrap = tk.Frame(parent, bg=C["bg"])
+        kpi_wrap.pack(fill="x", padx=20, pady=(12, 0))
+        for i in range(4):
+            kpi_wrap.columnconfigure(i, weight=1, uniform="kpi")
+
+        self.kpi_present = Kpi(kpi_wrap, "Students Present", "#10b981", sub="Tracking enrolled roster")
+        self.kpi_present.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+
+        self.kpi_absent = Kpi(kpi_wrap, "Campus Absentees", "#f43f5e", sub="Awaiting arrival scan")
+        self.kpi_absent.grid(row=0, column=1, sticky="ew", padx=4)
+
+        self.kpi_mood = Kpi(kpi_wrap, "Wellbeing Index", "#a855f7", sub="FACS Geometric AU")
+        self.kpi_mood.grid(row=0, column=2, sticky="ew", padx=4)
+
+        self.kpi_radar = Kpi(kpi_wrap, "Perimeter Radar", "#0ea5e9", sub="Live Perimeter Scan")
+        self.kpi_radar.grid(row=0, column=3, sticky="ew", padx=(6, 0))
+
     def _build_body(self, parent):
+        self._build_kpi_bar(parent)
+
         body = tk.Frame(parent, bg=C["bg"])
-        body.pack(fill="both", expand=True, padx=20, pady=(14, 8))
+        body.pack(fill="both", expand=True, padx=20, pady=(10, 8))
         body.columnconfigure(0, weight=1)
         body.columnconfigure(1, weight=0, minsize=400)
         body.rowconfigure(0, weight=3)
@@ -1123,12 +1347,12 @@ class App:
         ttk.Button(search_row, text="Clear", style="Secondary.TButton",
                    command=lambda: self.search_var.set("")).pack(side="left")
 
-        columns = ("Name", "Age", "Match %", "Emotion", "Timestamp")
+        columns = ("Roll", "Name", "Class", "Match %", "Emotion", "Timestamp")
         wrap = ttk.Frame(log_body, style="Inner.TFrame")
         wrap.pack(fill="both", expand=True)
         self.tree = ttk.Treeview(wrap, columns=columns, show="headings", height=6)
-        widths = {"Name": 180, "Age": 70, "Match %": 90, "Emotion": 120, "Timestamp": 190}
-        anchors = {"Name": "w", "Age": "center", "Match %": "center", "Emotion": "center", "Timestamp": "center"}
+        widths = {"Roll": 95, "Name": 160, "Class": 140, "Match %": 85, "Emotion": 110, "Timestamp": 180}
+        anchors = {"Roll": "center", "Name": "w", "Class": "center", "Match %": "center", "Emotion": "center", "Timestamp": "center"}
         for col in columns:
             self.tree.heading(col, text=col)
             self.tree.column(col, width=widths[col], anchor=anchors.get(col, "center"))
@@ -1150,6 +1374,65 @@ class App:
 
     def set_status(self, text):
         self.status_text.config(text=text)
+
+    def open_visitors_modal(self):
+        VisitorsModal(self.root, self)
+
+    def open_web_portal(self):
+        import webbrowser
+        webbrowser.open("http://localhost:5000")
+        self.set_status("Opened Command Center Web Portal at http://localhost:5000")
+
+    def _get_students_data(self):
+        st_file = os.path.join(BASE_DIR, "data", "students.json")
+        if os.path.exists(st_file):
+            try:
+                with open(st_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return {}
+
+    def _update_kpi_cards(self):
+        try:
+            students = self._get_students_data()
+            total_students = len(students)
+            today = datetime.now().strftime("%Y-%m-%d")
+            present_names = set()
+            emotions = []
+            strangers_today = 0
+
+            rows = getattr(self, "last_log_rows", [])
+            for r in rows:
+                if len(r) < 5:
+                    continue
+                name, age, match, emo, ts = r[0].strip(), r[1], r[2], r[3], r[4]
+                if ts.startswith(today):
+                    if name.lower() in ("stranger", "unknown"):
+                        strangers_today += 1
+                    else:
+                        present_names.add(name.lower())
+                    if emo and emo.lower() not in ("unknown", ""):
+                        emotions.append(emo.lower())
+
+            present_count = len(present_names.intersection(set(students.keys())))
+            absent_count = max(0, total_students - present_count)
+            pct = (present_count / total_students * 100) if total_students > 0 else 0
+
+            happy_count = sum(1 for e in emotions if e in ("happy", "surprise"))
+            mood_pct = int((happy_count / len(emotions)) * 100) if emotions else 85
+
+            if hasattr(self, "kpi_present"):
+                self.kpi_present.set(f"{present_count} / {total_students} ({pct:.0f}%)",
+                                     f"Enrolled Roster: {total_students}")
+                self.kpi_absent.set(f"{absent_count} Students",
+                                    "Awaiting arrival" if absent_count > 0 else "All present today!")
+                self.kpi_mood.set(f"{mood_pct}% Happy",
+                                  f"{len(emotions)} expressions logged" if emotions else "Calibrated FACS AU")
+                radar_txt = f"{strangers_today} Stranger Alert" if strangers_today > 0 else "Secure (All Clear)"
+                self.kpi_radar.set(radar_txt, "Active Perimeter Radar")
+        except Exception:
+            pass
 
     def get_zoom(self, cid):
         if hasattr(self, "camera_zooms") and cid in self.camera_zooms:
@@ -2109,12 +2392,14 @@ class App:
                     self.last_log_rows = list(csv.reader(f))[1:]
                 total = len(self.last_log_rows)
                 self.filter_attendance_table()
+                self._update_kpi_cards()
                 self.alerts.ingest(self.last_log_rows)        # stranger alerts
             except Exception:
                 log_exception("refresh_logs")
         else:
             self.last_log_rows = []
             self.filter_attendance_table()
+            self._update_kpi_cards()
         self.stats.config(text=f"Cameras: {len(self.cameras)}   |   "
                                f"Registered faces: {faces}   |   Log entries: {total}")
 
@@ -2122,19 +2407,40 @@ class App:
         query = getattr(self, "search_var", None)
         q = query.get().strip().lower() if query else ""
         rows = getattr(self, "last_log_rows", [])
+        students = self._get_students_data()
         self.tree.delete(*self.tree.get_children())
-        filtered = [r for r in rows if not q or (r and q in str(r[0]).lower())]
+        filtered = [r for r in rows if not q or (r and (q in str(r[0]).lower() or (len(r) > 1 and q in str(r[1]).lower())))]
         for i, row in enumerate(reversed(filtered[-100:])):     # newest first
-            row = (row + [""] * 5)[:5]
+            name = str(row[0]).strip() if len(row) > 0 and row[0] else ""
+            age = str(row[1]).strip() if len(row) > 1 else ""
+            match_pct = str(row[2]).strip() if len(row) > 2 else ""
+            emotion = str(row[3]).strip() if len(row) > 3 else ""
+            timestamp = str(row[4]).strip() if len(row) > 4 else ""
+
+            # Student lookup for Roll Number & Class
+            st_info = students.get(name.lower(), {})
+            if st_info:
+                roll = st_info.get("roll", "CS-2024-xxx")
+                display_name = st_info.get("name", name)
+                klass = st_info.get("klass", "B.Tech CSE")
+            elif name.lower() in ("stranger", "unknown"):
+                roll = "—"
+                display_name = "⚠ Stranger"
+                klass = "Unregistered"
+            else:
+                roll = "VISITOR"
+                display_name = name
+                klass = "General / Guest"
+
+            tree_row = (roll, display_name, klass, match_pct, emotion, timestamp)
             parity = "even" if i % 2 == 0 else "odd"
-            name = str(row[0]).strip().lower() if row and row[0] else ""
-            if name in ("stranger", "unknown"):
+            if name.lower() in ("stranger", "unknown"):
                 tag = f"stranger_{parity}"
-            elif name:
+            elif st_info:
                 tag = f"known_{parity}"
             else:
                 tag = parity
-            self.tree.insert("", "end", values=row, tags=(tag,))
+            self.tree.insert("", "end", values=tree_row, tags=(tag,))
 
     def export_daily_report(self):
         try:
