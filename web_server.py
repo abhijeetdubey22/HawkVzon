@@ -710,6 +710,10 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
             summary = self.get_principal_summary()
             self.send_json(summary)
 
+        elif path == "/api/visitors":
+            visitors = self.get_visitors_summary()
+            self.send_json(visitors)
+
         elif path.startswith("/snapshots/"):
             filename = os.path.basename(path)
             fpath = os.path.abspath(os.path.join(SNAPSHOTS_DIR, filename))
@@ -800,6 +804,19 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
                     self.send_json({"success": False, "error": "No frame available to capture"}, code=500)
             else:
                 self.send_json({"success": False, "error": "Vision engine unavailable"}, code=500)
+
+        elif path == "/api/extend_visitor_time":
+            vid = data.get("id", "guest_mehta")
+            mins = int(data.get("minutes", 30))
+            success, msg, v = self.extend_visitor_time(vid, mins)
+            self.send_json({"success": success, "message": msg, "visitor": v})
+
+        elif path == "/api/add_visitor":
+            try:
+                new_v = self.add_visitor(data)
+                self.send_json({"success": True, "visitor": new_v})
+            except Exception as e:
+                self.send_json({"success": False, "error": str(e)}, code=500)
         else:
             self.send_error(404, "API endpoint not found")
 
@@ -847,6 +864,140 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
             vision_worker.switch_camera(cid)
 
         return new_cam
+
+    def _load_visitors(self):
+        """Loads visitors registry from data/visitors.json."""
+        vfile = os.path.join(DATA_DIR, "visitors.json")
+        if os.path.exists(vfile):
+            try:
+                with open(vfile, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return {}
+
+    def _save_visitors(self, visitors):
+        """Persists visitors registry to data/visitors.json."""
+        vfile = os.path.join(DATA_DIR, "visitors.json")
+        try:
+            with open(vfile, "w", encoding="utf-8") as f:
+                json.dump(visitors, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"[Visitor Save Error] {e}")
+
+    def get_visitors_summary(self):
+        """Computes live remaining minutes, countdown, and active journey status for all visitors."""
+        visitors = self._load_visitors()
+        now = datetime.now()
+        out = []
+        for vid, v in visitors.items():
+            valid_to_str = v.get("valid_to", "")
+            try:
+                vt = datetime.strptime(valid_to_str, "%Y-%m-%d %H:%M:%S")
+                diff_sec = (vt - now).total_seconds()
+                rem_mins = int(diff_sec // 60)
+            except Exception:
+                rem_mins = 60
+
+            status = v.get("status", "Active")
+            if status != "Departed":
+                if rem_mins < 0:
+                    status = "Overstayed"
+                elif rem_mins <= 15:
+                    status = "Expiring Soon"
+                else:
+                    status = "Active"
+            v_copy = dict(v)
+            v_copy["id"] = vid
+            v_copy["remaining_minutes"] = rem_mins
+            v_copy["status"] = status
+            out.append(v_copy)
+        return out
+
+    def extend_visitor_time(self, visitor_id, minutes):
+        """Extends visitor permit by 30m, 50m, 1h, or custom minutes requested by Principal."""
+        visitors = self._load_visitors()
+        if visitor_id not in visitors:
+            matched_key = None
+            for k, val in visitors.items():
+                if visitor_id.lower() in val.get("name", "").lower() or visitor_id.lower() in k.lower():
+                    matched_key = k
+                    break
+            if not matched_key:
+                return False, f"Visitor '{visitor_id}' not found", None
+            visitor_id = matched_key
+
+        v = visitors[visitor_id]
+        now = datetime.now()
+        current_valid_to = v.get("valid_to", "")
+        try:
+            curr_dt = datetime.strptime(current_valid_to, "%Y-%m-%d %H:%M:%S")
+            base_dt = max(now, curr_dt)
+        except Exception:
+            base_dt = now
+
+        from datetime import timedelta
+        new_dt = base_dt + timedelta(minutes=int(minutes))
+        new_str = new_dt.strftime("%Y-%m-%d %H:%M:%S")
+        v["valid_to"] = new_str
+        v["status"] = "Active"
+
+        now_time_str = now.strftime("%I:%M %p")
+        cutoff_fmt = new_dt.strftime("%I:%M %p")
+        journey = v.setdefault("journey", [])
+        journey.append({
+            "time": now_time_str,
+            "camera": "Command Center Admin",
+            "zone": v.get("current_zone", "Campus Area"),
+            "event": f"Pass extended by +{minutes}m by Principal (New Cutoff: {cutoff_fmt})"
+        })
+
+        self._save_visitors(visitors)
+        msg = f"Extended {v.get('name', 'Guest')}'s permit by +{minutes} minutes! New departure cutoff: {cutoff_fmt}."
+        return True, msg, v
+
+    def add_visitor(self, data):
+        """Creates a new guest pass with time limits and allowed zones."""
+        visitors = self._load_visitors()
+        name = str(data.get("name", "New Guest")).strip()
+        phone = str(data.get("phone", "")).strip()
+        host = str(data.get("host", "Principal Office")).strip()
+        purpose = str(data.get("purpose", "Campus Visit")).strip()
+        duration_mins = int(data.get("duration", 60))
+        allowed_zones = data.get("allowed_zones", ["Main Entrance Gate", "Admin Block", "Classroom"])
+
+        from datetime import timedelta
+        now = datetime.now()
+        valid_from = now.strftime("%Y-%m-%d %H:%M:%S")
+        valid_to = (now + timedelta(minutes=duration_mins)).strftime("%Y-%m-%d %H:%M:%S")
+
+        vid = f"guest_{uuid.uuid4().hex[:6]}"
+        new_v = {
+            "id": vid,
+            "name": name,
+            "phone": phone,
+            "host": host,
+            "purpose": purpose,
+            "photo": "/snapshots/latest_unknown.jpg",
+            "valid_from": valid_from,
+            "valid_to": valid_to,
+            "allowed_zones": allowed_zones,
+            "status": "Active",
+            "current_zone": "Main Entrance Gate",
+            "last_seen_time": now.strftime("%I:%M %p"),
+            "last_seen_camera": "PixaVision CCTV",
+            "journey": [
+              {
+                "time": now.strftime("%I:%M %p"),
+                "camera": "PixaVision CCTV",
+                "zone": "Main Entrance Gate",
+                "event": "Guest Permit Issued"
+              }
+            ]
+        }
+        visitors[vid] = new_v
+        self._save_visitors(visitors)
+        return new_v
 
     def _load_students_map(self):
         """Loads students dictionary with normalized lookup keys."""
@@ -998,6 +1149,9 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
         cam_info = get_cameras_list()
         cam_count = len(cam_info.get("cameras", []))
 
+        visitors_list = self.get_visitors_summary()
+        active_visitors = len([v for v in visitors_list if v.get("status") != "Departed"])
+
         return {
             "total_enrolled": total_enrolled,
             "present_today": present_count,
@@ -1006,6 +1160,8 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
             "absent_rate": absent_rate,
             "present_list": present_list,
             "absent_list": absent_list,
+            "visitors": visitors_list,
+            "active_visitors_count": active_visitors,
             "happiness_index": happiness_index,
             "mood_label": mood_label,
             "mood_color": mood_color,
@@ -1074,18 +1230,21 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
       </div>
       <div>
         <div class="flex items-center gap-2.5">
-          <h1 class="text-base md:text-xl font-extrabold tracking-tight text-white">Campus AI Surveillance Command Center</h1>
+          <h1 class="text-base md:text-xl font-extrabold tracking-tight text-white">Campus AI Surveillance & Principal Command Center</h1>
           <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-950/90 text-emerald-400 border border-emerald-800/60 flex items-center gap-1.5">
             <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse-fast"></span>
             <span id="badgeStatus">LIVE</span>
           </span>
         </div>
-        <p class="text-[11px] text-slate-400">Autonomous Facial Recognition, Emotion Analytics & Campus Security Hub</p>
+        <p class="text-[11px] text-slate-400">Autonomous Facial Biometrics, Attendance Roll-Call, Campus Sentiment & Smart Guest Escort</p>
       </div>
     </div>
 
     <!-- Header Actions -->
     <div class="flex items-center gap-2.5">
+      <button onclick="openAddVisitorModal()" class="px-3.5 py-2 rounded-lg bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white text-xs font-semibold transition flex items-center gap-1.5 shadow-md shadow-indigo-900/40">
+        <span>🎟️</span> <span class="hidden sm:inline">Issue Guest Pass</span>
+      </button>
       <button onclick="openAddCameraModal()" class="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition flex items-center gap-1.5 shadow-md shadow-emerald-900/40">
         <span>➕</span> <span class="hidden sm:inline">Add Camera</span>
       </button>
@@ -1215,7 +1374,7 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
             </div>
             
             <div class="flex flex-wrap items-center gap-2 w-full md:w-auto">
-              <!-- 3 Interactive Tabs -->
+              <!-- 4 Interactive Tabs -->
               <div class="flex items-center bg-slate-950/90 p-1 rounded-xl border border-slate-800 text-xs">
                 <button id="tabLiveBtn" onclick="setLedgerTab('live')" class="px-3 py-1 rounded-lg bg-sky-600 text-white font-semibold transition">
                   🔴 Live Stream Scans
@@ -1225,6 +1384,9 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
                 </button>
                 <button id="tabAbsentBtn" onclick="setLedgerTab('absent')" class="px-3 py-1 rounded-lg text-slate-400 hover:text-white font-semibold transition">
                   ❌ Absent (<span id="tabCountAbsent">0</span>)
+                </button>
+                <button id="tabVisitorBtn" onclick="setLedgerTab('visitors')" class="px-3 py-1 rounded-lg text-slate-400 hover:text-white font-semibold transition flex items-center gap-1">
+                  <span>🎟️</span> <span>Guests</span> (<span id="tabCountVisitors">1</span>)
                 </button>
               </div>
 
@@ -1425,6 +1587,153 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
           </button>
           <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white shadow-md shadow-emerald-900/40">
             Save & Connect Camera
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- EXTEND VISITOR TIME MODAL DIALOG (Principal Control) -->
+  <div id="extendVisitorModal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="glass max-w-md w-full rounded-2xl border border-sky-500/60 p-6 shadow-2xl relative glow-cyan">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <span>⏱️</span> Extend Campus Guest Permit
+        </h3>
+        <button onclick="closeExtendModal()" class="text-slate-400 hover:text-white text-lg">&times;</button>
+      </div>
+
+      <div class="mt-4 space-y-4">
+        <!-- Guest Details Preview -->
+        <div class="bg-slate-950/90 p-3.5 rounded-xl border border-slate-800 flex items-center gap-3">
+          <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center text-white text-xl font-bold shrink-0 shadow-md">
+            👨‍💼
+          </div>
+          <div class="min-w-0 flex-1">
+            <h4 class="text-sm font-bold text-white truncate" id="extGuestName">Dr. Rajesh Mehta</h4>
+            <p class="text-xs text-sky-400" id="extGuestHost">Host: Prof. Sharma &bull; CS Dept</p>
+            <div class="flex items-center justify-between mt-1 text-[11px]">
+              <span class="text-slate-400">Current Cutoff:</span>
+              <strong class="text-amber-300 font-mono px-2 py-0.5 rounded bg-amber-950/80 border border-amber-800/60" id="extCurrentCutoff">01:00 PM</strong>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-2">1. Quick Preset Extension:</label>
+          <div class="grid grid-cols-3 gap-2">
+            <button type="button" onclick="selectPresetMinutes(30)" id="presetBtn30" class="py-2.5 rounded-xl bg-slate-900 hover:bg-sky-600 hover:text-white border border-slate-700 text-xs font-bold text-slate-200 transition">
+              +30 Mins
+            </button>
+            <button type="button" onclick="selectPresetMinutes(50)" id="presetBtn50" class="py-2.5 rounded-xl bg-slate-900 hover:bg-sky-600 hover:text-white border border-slate-700 text-xs font-bold text-slate-200 transition">
+              +50 Mins
+            </button>
+            <button type="button" onclick="selectPresetMinutes(60)" id="presetBtn60" class="py-2.5 rounded-xl bg-slate-900 hover:bg-sky-600 hover:text-white border border-slate-700 text-xs font-bold text-slate-200 transition">
+              +1 Hour
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1.5">2. Or Enter Custom Minutes (Principal Manual Input):</label>
+          <div class="flex items-center gap-2">
+            <input type="number" id="customMinutesInput" min="5" max="480" placeholder="e.g. 15, 45, 90..."
+                   class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white font-mono placeholder-slate-500 focus:outline-none focus:border-sky-500">
+            <span class="text-xs text-slate-400 shrink-0 font-medium">Minutes</span>
+          </div>
+          <p class="text-[10px] text-slate-400 mt-1">Principal can type any custom minutes (e.g. 15 mins for quick exit or 120 mins for full workshop session).</p>
+        </div>
+
+        <input type="hidden" id="extGuestId" value="guest_mehta">
+
+        <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-800">
+          <button type="button" onclick="closeExtendModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300">
+            Cancel
+          </button>
+          <button type="button" onclick="submitTimeExtension()" class="px-5 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-xs font-bold text-white shadow-lg shadow-sky-900/50 flex items-center gap-1.5 transition">
+            <span>💾</span> Save & Extend Time
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VISITOR TRANSIT BREADCRUMB JOURNEY MODAL -->
+  <div id="journeyModal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="glass max-w-lg w-full rounded-2xl border border-slate-700 p-6 shadow-2xl relative">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <span>🗺️</span> Campus Transit Breadcrumb Trail
+          </h3>
+          <p class="text-xs text-sky-400 font-semibold" id="journeyGuestName">Dr. Rajesh Mehta</p>
+        </div>
+        <button onclick="closeJourneyModal()" class="text-slate-400 hover:text-white text-lg">&times;</button>
+      </div>
+
+      <div class="mt-4 max-h-[380px] overflow-y-auto pr-1" id="journeyTrail">
+        <!-- Dynamically injected timeline steps -->
+      </div>
+
+      <div class="flex items-center justify-end pt-3 border-t border-slate-800 mt-4">
+        <button type="button" onclick="closeJourneyModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300">
+          Close Trail
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ISSUE NEW GUEST PASS MODAL -->
+  <div id="addVisitorModal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="glass max-w-md w-full rounded-2xl border border-indigo-600/70 p-6 shadow-2xl relative glow-cyan">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <span>🎟️</span> Issue Campus Guest Pass
+        </h3>
+        <button onclick="closeAddVisitorModal()" class="text-slate-400 hover:text-white text-lg">&times;</button>
+      </div>
+
+      <form onsubmit="submitNewVisitor(event)" class="space-y-3.5 mt-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Guest Full Name</label>
+          <input type="text" id="newGuestName" required placeholder="e.g. Dr. Rajesh Mehta or Mrs. Sunita Roy"
+                 class="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Mobile / WhatsApp Phone</label>
+          <input type="text" id="newGuestPhone" placeholder="+91 98765 43210"
+                 class="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Host Faculty / Department</label>
+          <input type="text" id="newGuestHost" required placeholder="e.g. Prof. Sharma (CS Dept) or Principal Office"
+                 class="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Visit Purpose</label>
+          <input type="text" id="newGuestPurpose" required placeholder="e.g. Guest Lecture, Lab Inspection, Parent Meet"
+                 class="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Initial Validity Window</label>
+          <select id="newGuestDuration" class="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-xs text-white focus:outline-none focus:border-indigo-500">
+            <option value="60">1 Hour (Standard Meeting)</option>
+            <option value="120" selected>2 Hours (Lecture / Lab Session)</option>
+            <option value="180">3 Hours (Half Day Seminar)</option>
+            <option value="360">6 Hours (Full Day Event)</option>
+          </select>
+        </div>
+
+        <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-800">
+          <button type="button" onclick="closeAddVisitorModal()" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300">
+            Cancel
+          </button>
+          <button type="submit" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-md shadow-indigo-900/40">
+            Activate Guest Permit
           </button>
         </div>
       </form>
@@ -1704,7 +2013,7 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
 
     function setLedgerTab(tab) {
       currentLedgerTab = tab;
-      const tabs = ['tabLiveBtn', 'tabPresentBtn', 'tabAbsentBtn'];
+      const tabs = ['tabLiveBtn', 'tabPresentBtn', 'tabAbsentBtn', 'tabVisitorBtn'];
       tabs.forEach(t => {
         const el = document.getElementById(t);
         if (el) el.className = "px-3 py-1 rounded-lg text-slate-400 hover:text-white font-semibold transition";
@@ -1715,6 +2024,8 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
         document.getElementById('tabPresentBtn').className = "px-3 py-1 rounded-lg bg-emerald-600 text-white font-semibold shadow transition";
       } else if (tab === 'absent') {
         document.getElementById('tabAbsentBtn').className = "px-3 py-1 rounded-lg bg-rose-600 text-white font-semibold shadow transition";
+      } else if (tab === 'visitors') {
+        document.getElementById('tabVisitorBtn').className = "px-3 py-1 rounded-lg bg-indigo-600 text-white font-semibold shadow transition";
       }
       renderActiveLedgerTable();
     }
@@ -1839,6 +2150,222 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
           `;
         });
         tbody.innerHTML = html;
+      } else if (currentLedgerTab === 'visitors') {
+        thead.innerHTML = `
+          <tr>
+            <th class="py-2.5 px-3">Photo</th>
+            <th class="py-2.5 px-3">Guest Name & Contact</th>
+            <th class="py-2.5 px-3">Host Faculty / Dept</th>
+            <th class="py-2.5 px-3">Visit Purpose</th>
+            <th class="py-2.5 px-3">Approved Zones</th>
+            <th class="py-2.5 px-3">Live Location</th>
+            <th class="py-2.5 px-3">Time Remaining</th>
+            <th class="py-2.5 px-3">Principal Time Extension Control</th>
+          </tr>
+        `;
+        const list = (cachedSummary && cachedSummary.visitors) || [];
+        if (list.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-500">No active visitor passes issued today. Click "Issue Guest Pass" to register a visitor.</td></tr>';
+          return;
+        }
+        let html = '';
+        list.forEach(v => {
+          const rem = v.remaining_minutes !== undefined ? v.remaining_minutes : 60;
+          let badge = '';
+          if (v.status === 'Departed') {
+            badge = '<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">Departed</span>';
+          } else if (rem <= 0) {
+            badge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950 text-rose-300 border border-rose-800 animate-pulse">🔴 Overstayed (${Math.abs(rem)}m)</span>`;
+          } else if (rem <= 15) {
+            badge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800 animate-pulse">🟡 ${rem}m left (Expiring)</span>`;
+          } else {
+            const h = Math.floor(rem / 60);
+            const m = rem % 60;
+            const timeTxt = h > 0 ? `${h}h ${m}m left` : `${m}m left`;
+            badge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">🟢 ${timeTxt}</span>`;
+          }
+
+          html += `
+            <tr class="hover:bg-slate-800/40 transition">
+              <td class="py-2 px-3">
+                <div class="w-9 h-9 rounded-lg bg-sky-950 border border-sky-800 overflow-hidden shrink-0 flex items-center justify-center cursor-pointer" onclick="openImage('${escapeHtml(v.photo || '/snapshots/latest_unknown.jpg')}')">
+                  <img src="${escapeHtml(v.photo || '/snapshots/latest_unknown.jpg')}" alt="Guest" class="w-full h-full object-cover" onerror="this.src='/snapshots/latest_unknown.jpg'">
+                </div>
+              </td>
+              <td class="py-2.5 px-3">
+                <strong class="text-white block">${escapeHtml(v.name)}</strong>
+                <span class="text-slate-400 font-mono text-[11px]">${escapeHtml(v.phone || '-')}</span>
+              </td>
+              <td class="py-2.5 px-3 text-sky-400 font-semibold">${escapeHtml(v.host)}</td>
+              <td class="py-2.5 px-3 text-slate-300">${escapeHtml(v.purpose)}</td>
+              <td class="py-2.5 px-3 text-slate-400 text-[11px]">${escapeHtml((v.allowed_zones || []).join(', '))}</td>
+              <td class="py-2.5 px-3">
+                <span class="text-emerald-400 font-semibold block">${escapeHtml(v.current_zone || 'Campus Area')}</span>
+                <span class="text-slate-500 font-mono text-[10px]">Seen: ${escapeHtml(v.last_seen_time || 'Just now')}</span>
+              </td>
+              <td class="py-2.5 px-3">${badge}</td>
+              <td class="py-2.5 px-3">
+                <div class="flex items-center gap-1.5">
+                  <button onclick="openExtendModal('${v.id}', '${escapeHtml(v.name)}', '${escapeHtml(v.valid_to || '')}', '${escapeHtml(v.host)}')" class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white text-[11px] font-bold shadow-md shadow-sky-900/40 transition flex items-center gap-1">
+                    <span>⏱️</span> Extend Time
+                  </button>
+                  <button onclick="openJourneyModal('${v.id}')" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-medium border border-slate-700 transition" title="Inspect Transit Breadcrumbs">
+                    🗺️
+                  </button>
+                </div>
+              </td>
+            </tr>
+          `;
+        });
+        tbody.innerHTML = html;
+      }
+    }
+
+    function openExtendModal(guestId, guestName, validToStr, hostStr) {
+      document.getElementById('extGuestId').value = guestId;
+      document.getElementById('extGuestName').innerText = guestName || "Dr. Rajesh Mehta";
+      document.getElementById('extGuestHost').innerText = "Host: " + (hostStr || "Prof. Sharma");
+      
+      let cutoffDisplay = validToStr || "01:00 PM";
+      if (cutoffDisplay.includes(" ")) {
+        const parts = cutoffDisplay.split(" ");
+        cutoffDisplay = parts[parts.length - 1];
+      }
+      document.getElementById('extCurrentCutoff').innerText = cutoffDisplay;
+      document.getElementById('customMinutesInput').value = "";
+      
+      [30, 50, 60].forEach(m => {
+        const b = document.getElementById('presetBtn' + m);
+        if (b) b.className = "py-2.5 rounded-xl bg-slate-900 hover:bg-sky-600 hover:text-white border border-slate-700 text-xs font-bold text-slate-200 transition";
+      });
+
+      document.getElementById('extendVisitorModal').classList.remove('hidden');
+    }
+
+    function closeExtendModal() {
+      document.getElementById('extendVisitorModal').classList.add('hidden');
+    }
+
+    function selectPresetMinutes(mins) {
+      document.getElementById('customMinutesInput').value = mins;
+      [30, 50, 60].forEach(m => {
+        const b = document.getElementById('presetBtn' + m);
+        if (b) {
+          if (m === mins) {
+            b.className = "py-2.5 rounded-xl bg-sky-600 text-white border border-sky-400 font-bold text-xs shadow-md shadow-sky-900/50 glow-cyan transition";
+          } else {
+            b.className = "py-2.5 rounded-xl bg-slate-900 hover:bg-sky-600 hover:text-white border border-slate-700 text-xs font-bold text-slate-200 transition";
+          }
+        }
+      });
+    }
+
+    async function submitTimeExtension() {
+      const vid = document.getElementById('extGuestId').value;
+      const customVal = document.getElementById('customMinutesInput').value;
+      const mins = parseInt(customVal, 10);
+
+      if (!mins || mins <= 0) {
+        showToast("Please select a preset (+30, +50, +1h) or enter custom minutes!", "error");
+        return;
+      }
+
+      try {
+        showToast(`Extending permit by ${mins} minutes...`, "info");
+        const res = await fetch('/api/extend_visitor_time', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: vid, minutes: mins })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message, "success");
+          closeExtendModal();
+          await pollStats();
+          if (currentLedgerTab === 'visitors') {
+            renderActiveLedgerTable();
+          }
+        } else {
+          showToast("Failed to extend permit: " + (data.error || "Unknown error"), "error");
+        }
+      } catch (err) {
+        showToast("Network error extending permit", "error");
+      }
+    }
+
+    function openJourneyModal(guestId) {
+      const visitors = (cachedSummary && cachedSummary.visitors) || [];
+      const v = visitors.find(x => x.id === guestId) || visitors[0];
+      if (!v) {
+        showToast("No journey history found", "info");
+        return;
+      }
+      document.getElementById('journeyGuestName').innerText = v.name + " (" + v.purpose + ")";
+      const trail = document.getElementById('journeyTrail');
+      trail.innerHTML = "";
+      const journey = v.journey || [];
+      if (journey.length === 0) {
+        trail.innerHTML = '<p class="text-xs text-slate-400 py-4 text-center">No transit events recorded yet.</p>';
+      } else {
+        journey.forEach((step, idx) => {
+          trail.innerHTML += `
+            <div class="flex items-start gap-3 relative pb-4">
+              <div class="w-6 h-6 rounded-full bg-sky-600 text-white flex items-center justify-center text-xs font-bold shrink-0 z-10 shadow">
+                ${idx + 1}
+              </div>
+              <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800 flex-1">
+                <div class="flex items-center justify-between text-xs">
+                  <strong class="text-sky-300 font-mono">${escapeHtml(step.time)}</strong>
+                  <span class="text-[10px] text-slate-400">${escapeHtml(step.camera)}</span>
+                </div>
+                <div class="text-xs font-semibold text-white mt-1">${escapeHtml(step.zone)}</div>
+                <div class="text-[11px] text-emerald-400 mt-0.5">${escapeHtml(step.event || 'Transit Verified')}</div>
+              </div>
+            </div>
+          `;
+        });
+      }
+      document.getElementById('journeyModal').classList.remove('hidden');
+    }
+
+    function closeJourneyModal() {
+      document.getElementById('journeyModal').classList.add('hidden');
+    }
+
+    function openAddVisitorModal() {
+      document.getElementById('addVisitorModal').classList.remove('hidden');
+    }
+
+    function closeAddVisitorModal() {
+      document.getElementById('addVisitorModal').classList.add('hidden');
+    }
+
+    async function submitNewVisitor(e) {
+      e.preventDefault();
+      const payload = {
+        name: document.getElementById('newGuestName').value,
+        phone: document.getElementById('newGuestPhone').value,
+        host: document.getElementById('newGuestHost').value,
+        purpose: document.getElementById('newGuestPurpose').value,
+        duration: parseInt(document.getElementById('newGuestDuration').value, 10) || 60
+      };
+      try {
+        const res = await fetch('/api/add_visitor', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(`Guest Pass issued for ${payload.name}!`, "success");
+          closeAddVisitorModal();
+          await pollStats();
+          setLedgerTab('visitors');
+        } else {
+          showToast("Error issuing pass: " + (data.error || "Unknown"), "error");
+        }
+      } catch (err) {
+        showToast("Request failed", "error");
       }
     }
 
@@ -1876,6 +2403,11 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
         if (countPres) countPres.innerText = data.present_today || 0;
         const countAbs = document.getElementById('tabCountAbsent');
         if (countAbs) countAbs.innerText = data.absent_count !== undefined ? data.absent_count : (data.total_enrolled - data.present_today);
+        const countVis = document.getElementById('tabCountVisitors');
+        if (countVis) {
+          const vList = data.visitors || [];
+          countVis.innerText = vList.filter(x => x.status !== 'Departed').length;
+        }
 
         // Update Last Detected Stranger Radar Card
         if (data.last_stranger) {
@@ -1896,7 +2428,7 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
           }
         }
 
-        // If on present or absent tab, refresh active table
+        // If on present, absent, or visitors tab, refresh active table
         if (currentLedgerTab !== 'live') {
           renderActiveLedgerTable();
         }
