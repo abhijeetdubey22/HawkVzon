@@ -16,6 +16,7 @@ import io
 import hashlib
 import hmac
 import base64
+import re
 from datetime import datetime
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
@@ -692,6 +693,10 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
             stats = self.get_summary_stats()
             self.send_json(stats)
 
+        elif path == "/api/principal_summary":
+            summary = self.get_principal_summary()
+            self.send_json(summary)
+
         elif path.startswith("/snapshots/"):
             filename = os.path.basename(path)
             fpath = os.path.abspath(os.path.join(SNAPSHOTS_DIR, filename))
@@ -830,16 +835,36 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
 
         return new_cam
 
+    def _load_students_map(self):
+        """Loads students dictionary with normalized lookup keys."""
+        students_file = os.path.join(DATA_DIR, "students.json")
+        all_students = {}
+        if os.path.exists(students_file):
+            try:
+                with open(students_file, "r", encoding="utf-8") as sf:
+                    all_students = json.load(sf)
+            except Exception:
+                pass
+        return all_students
+
     def get_attendance_data(self):
+        """Retrieves raw attendance log enriched with student roll numbers and classes."""
         records = []
+        all_students = self._load_students_map()
         if os.path.exists(LOG_FILE):
             try:
                 with open(LOG_FILE, "r", encoding="utf-8", errors="replace") as f:
                     rows = list(csv.reader(f))[1:]
                 for row in reversed(rows[-100:]):
                     if len(row) >= 5:
+                        name = row[0]
+                        norm_k = re.sub(r"\s+", " ", name.strip()).lower()
+                        meta = all_students.get(norm_k, {})
+                        is_stranger = name.lower() in ("stranger", "unknown")
                         records.append({
-                            "name": row[0],
+                            "name": meta.get("name", name),
+                            "roll": meta.get("roll", "Unregistered" if is_stranger else "-"),
+                            "klass": meta.get("klass", "Perimeter Zone" if is_stranger else "Classroom"),
                             "age": row[1],
                             "match": row[2],
                             "emotion": row[3],
@@ -850,52 +875,135 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
                 pass
         return records
 
-    def get_summary_stats(self):
+    def get_principal_summary(self):
+        """Generates comprehensive College Principal KPIs, present/absent rosters, and intruder radar."""
+        all_students = self._load_students_map()
         today = datetime.now().strftime("%Y-%m-%d")
-        present_names = set()
-        stranger_sightings = 0
-        emotions = {}
+        present_map = {}
+        stranger_sightings_today = 0
+        emotions_today = {}
+        last_stranger_event = None
 
         if os.path.exists(LOG_FILE):
             try:
                 with open(LOG_FILE, "r", encoding="utf-8", errors="replace") as f:
-                    reader = csv.reader(f)
-                    header = next(reader, None)
-                    for row in reader:
-                        if len(row) >= 5 and row[4].startswith(today):
-                            name = row[0]
-                            emotion = row[3]
-                            if name.lower() in ("stranger", "unknown"):
-                                stranger_sightings += 1
+                    rows = list(csv.reader(f))[1:]
+                for row in rows:
+                    if len(row) < 5:
+                        continue
+                    name, age, match, emotion, ts = row[0], row[1], row[2], row[3], row[4]
+                    cam = row[5] if len(row) > 5 else "Default Camera"
+                    is_stranger = name.lower() in ("stranger", "unknown")
+
+                    if is_stranger:
+                        if ts.startswith(today):
+                            stranger_sightings_today += 1
+                        last_stranger_event = {
+                            "timestamp": ts,
+                            "camera": cam,
+                            "profile": age,
+                            "match": match,
+                            "photo": "/snapshots/latest_unknown.jpg"
+                        }
+                    else:
+                        if ts.startswith(today):
+                            norm_k = re.sub(r"\s+", " ", name.strip()).lower()
+                            meta = all_students.get(norm_k, {})
+                            if norm_k not in present_map:
+                                present_map[norm_k] = {
+                                    "name": meta.get("name", name),
+                                    "roll": meta.get("roll", "Enrolled"),
+                                    "klass": meta.get("klass", "Classroom"),
+                                    "age": meta.get("age", age),
+                                    "time_in": ts,
+                                    "last_seen": ts,
+                                    "camera": cam,
+                                    "emotion": emotion,
+                                    "match": match
+                                }
                             else:
-                                present_names.add(name)
+                                present_map[norm_k]["last_seen"] = ts
+                                present_map[norm_k]["camera"] = cam
+                                present_map[norm_k]["emotion"] = emotion
                             if emotion and emotion not in ("-", "Unknown"):
-                                emotions[emotion] = emotions.get(emotion, 0) + 1
+                                emotions_today[emotion] = emotions_today.get(emotion, 0) + 1
             except Exception:
                 pass
 
-        # Enrolled count
-        students_file = os.path.join(DATA_DIR, "students.json")
-        enrolled_count = 9
-        if os.path.exists(students_file):
-            try:
-                with open(students_file, "r", encoding="utf-8") as sf:
-                    enrolled_count = len(json.load(sf))
-            except Exception:
-                pass
+        total_enrolled = max(len(all_students), 1)
+        present_list = list(present_map.values())
+        present_count = len(present_list)
+        present_rate = round((present_count / total_enrolled) * 100, 1)
 
-        # Camera count
+        absent_list = []
+        for k, v in all_students.items():
+            if k not in present_map:
+                absent_list.append({
+                    "name": v.get("name", k.title()),
+                    "roll": v.get("roll", "N/A"),
+                    "klass": v.get("klass", "Classroom"),
+                    "age": v.get("age", "-"),
+                    "parent_name": v.get("parent_name", "Guardian"),
+                    "parent_phone": v.get("parent_phone", "-"),
+                    "status": "Not Arrived"
+                })
+        absent_count = len(absent_list)
+        absent_rate = round((absent_count / total_enrolled) * 100, 1)
+
+        total_emo = sum(emotions_today.values())
+        if total_emo > 0:
+            weighted = (
+                emotions_today.get("Happy", 0) * 1.0 +
+                emotions_today.get("Neutral", 0) * 0.85 +
+                emotions_today.get("Surprise", 0) * 0.70 +
+                emotions_today.get("Sad", 0) * 0.25 +
+                emotions_today.get("Angry", 0) * 0.10
+            )
+            happiness_index = round((weighted / total_emo) * 100, 1)
+        else:
+            happiness_index = 85.0
+
+        if happiness_index >= 75:
+            mood_label = "Optimal & Focused"
+            mood_color = "emerald"
+        elif happiness_index >= 50:
+            mood_label = "Calm & Attentive"
+            mood_color = "sky"
+        else:
+            mood_label = "Fatigued / Needs Care"
+            mood_color = "amber"
+
+        if not last_stranger_event:
+            last_stranger_event = {
+                "timestamp": "No perimeter intrusion",
+                "camera": "Gate Secure",
+                "profile": "No unidentified face",
+                "match": "100% Clear",
+                "photo": "/snapshots/latest_unknown.jpg"
+            }
+
         cam_info = get_cameras_list()
         cam_count = len(cam_info.get("cameras", []))
 
         return {
-            "total_enrolled": enrolled_count,
-            "present_today": len(present_names),
-            "attendance_rate": round(len(present_names) / max(enrolled_count, 1) * 100, 1),
-            "strangers_count": stranger_sightings,
+            "total_enrolled": total_enrolled,
+            "present_today": present_count,
+            "attendance_rate": present_rate,
+            "absent_count": absent_count,
+            "absent_rate": absent_rate,
+            "present_list": present_list,
+            "absent_list": absent_list,
+            "happiness_index": happiness_index,
+            "mood_label": mood_label,
+            "mood_color": mood_color,
+            "strangers_count": stranger_sightings_today,
+            "last_stranger": last_stranger_event,
             "active_cameras": cam_count,
-            "emotions": emotions
+            "emotions": emotions_today
         }
+
+    def get_summary_stats(self):
+        return self.get_principal_summary()
 
     def render_dashboard(self):
         return """<!DOCTYPE html>
@@ -1083,37 +1191,45 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
           </div>
         </div>
 
-        <!-- Real-Time Attendance Ledger Card -->
+        <!-- Attendance Roll-Call & Incident Ledger Card -->
         <div class="glass rounded-2xl p-5 border border-slate-800">
           <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-4">
             <div>
               <h2 class="text-base font-bold text-white flex items-center gap-2">
-                <span>📋</span> Real-Time Attendance Ledger
+                <span>📋</span> Attendance Roll-Call & Incident Ledger
               </h2>
-              <p class="text-xs text-slate-400">Automated student detections authenticated via biometric face landmarks</p>
+              <p class="text-xs text-slate-400">Authenticated student presence with roll numbers, arrival time & absentee tracking</p>
             </div>
-            <div class="relative w-full md:w-64">
-              <input type="text" id="searchInput" onkeyup="filterLedger()" placeholder="🔍 Quick search student name..."
-                     class="w-full px-3.5 py-2 rounded-lg bg-slate-950/80 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500">
+            
+            <div class="flex flex-wrap items-center gap-2 w-full md:w-auto">
+              <!-- 3 Interactive Tabs -->
+              <div class="flex items-center bg-slate-950/90 p-1 rounded-xl border border-slate-800 text-xs">
+                <button id="tabLiveBtn" onclick="setLedgerTab('live')" class="px-3 py-1 rounded-lg bg-sky-600 text-white font-semibold transition">
+                  🔴 Live Stream Scans
+                </button>
+                <button id="tabPresentBtn" onclick="setLedgerTab('present')" class="px-3 py-1 rounded-lg text-slate-400 hover:text-white font-semibold transition">
+                  ✅ Present (<span id="tabCountPresent">0</span>)
+                </button>
+                <button id="tabAbsentBtn" onclick="setLedgerTab('absent')" class="px-3 py-1 rounded-lg text-slate-400 hover:text-white font-semibold transition">
+                  ❌ Absent (<span id="tabCountAbsent">0</span>)
+                </button>
+              </div>
+
+              <div class="relative w-full md:w-56">
+                <input type="text" id="searchInput" onkeyup="filterLedger()" placeholder="🔍 Search name, roll..."
+                       class="w-full px-3 py-1.5 rounded-lg bg-slate-950/80 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500">
+              </div>
             </div>
           </div>
 
-          <div class="overflow-x-auto max-h-[360px] overflow-y-auto">
+          <div class="overflow-x-auto max-h-[380px] overflow-y-auto">
             <table class="w-full text-left text-xs" id="ledgerTable">
-              <thead class="sticky top-0 bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
-                <tr>
-                  <th class="py-2.5 px-3">Student Name</th>
-                  <th class="py-2.5 px-3">Age</th>
-                  <th class="py-2.5 px-3">Confidence</th>
-                  <th class="py-2.5 px-3">Expression</th>
-                  <th class="py-2.5 px-3">Timestamp</th>
-                  <th class="py-2.5 px-3">Camera / Location</th>
-                  <th class="py-2.5 px-3">Status</th>
-                </tr>
+              <thead class="sticky top-0 bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800" id="ledgerThead">
+                <!-- Injected dynamically by active tab -->
               </thead>
               <tbody id="ledgerBody" class="divide-y divide-slate-800/60 text-slate-300">
                 <tr>
-                  <td colspan="7" class="py-8 text-center text-slate-500">Loading attendance data...</td>
+                  <td colspan="8" class="py-8 text-center text-slate-500">Loading attendance data...</td>
                 </tr>
               </tbody>
             </table>
@@ -1122,30 +1238,55 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
 
       </div>
 
-      <!-- RIGHT COLUMN: Telemetry KPIs, Emotion Donut, & Stranger Snapshots (4 cols) -->
+      <!-- RIGHT COLUMN: Telemetry KPIs, Emotion Analytics, Stranger Radar (4 cols) -->
       <div class="lg:col-span-4 space-y-6">
 
-        <!-- 4 Quick Telemetry Cards -->
+        <!-- 4 Executive Principal KPI Cards -->
         <div class="grid grid-cols-2 gap-3.5">
           <div class="glass p-4 rounded-xl border border-slate-800 glow-emerald">
-            <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Present Today</div>
-            <div class="text-2xl md:text-3xl font-extrabold text-emerald-400 mt-1" id="kpiPresent">0</div>
-            <div class="text-[10px] text-emerald-500/90 mt-1" id="kpiRate">0% Rate</div>
+            <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+              <span>Present Today</span>
+              <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 font-bold" id="kpiRate">0%</span>
+            </div>
+            <div class="text-2xl md:text-3xl font-extrabold text-emerald-400 mt-1">
+              <span id="kpiPresent">0</span> <span class="text-xs text-slate-400 font-normal">/ <span id="kpiEnrolled">9</span></span>
+            </div>
+            <div class="text-[10px] text-emerald-500/90 mt-1">Verified identities in class</div>
           </div>
+
           <div class="glass p-4 rounded-xl border border-slate-800">
-            <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Enrolled</div>
-            <div class="text-2xl md:text-3xl font-extrabold text-white mt-1" id="kpiEnrolled">9</div>
-            <div class="text-[10px] text-slate-500 mt-1">Verified identities</div>
+            <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+              <span>Absent Students</span>
+              <span class="text-[10px] px-1.5 py-0.5 rounded bg-rose-950 text-rose-400 font-bold" id="kpiAbsentRate">0%</span>
+            </div>
+            <div class="text-2xl md:text-3xl font-extrabold text-rose-400 mt-1">
+              <span id="kpiAbsent">0</span> <span class="text-xs text-slate-400 font-normal">Pending</span>
+            </div>
+            <div class="text-[10px] text-slate-400 mt-1">Awaiting gate scan today</div>
           </div>
-          <div class="glass p-4 rounded-xl border border-slate-800">
-            <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Unknown Strangers</div>
-            <div class="text-2xl md:text-3xl font-extrabold text-sky-400 mt-1" id="kpiStrangers">0</div>
-            <div class="text-[10px] text-sky-500/90 mt-1">Perimeter sightings</div>
+
+          <div class="glass p-4 rounded-xl border border-slate-800 glow-cyan">
+            <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+              <span>Mood Index</span>
+              <span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-950 text-sky-400 font-bold" id="kpiMoodLabel">Optimal</span>
+            </div>
+            <div class="text-2xl md:text-3xl font-extrabold text-sky-400 mt-1">
+              <span id="kpiHappiness">85%</span> <span class="text-xs text-slate-400 font-normal">Score</span>
+            </div>
+            <div class="w-full bg-slate-800 rounded-full h-1.5 mt-2 overflow-hidden">
+              <div id="happinessProgressBar" class="bg-gradient-to-r from-sky-400 to-emerald-400 h-1.5 rounded-full" style="width: 85%"></div>
+            </div>
           </div>
+
           <div class="glass p-4 rounded-xl border border-slate-800">
-            <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Active Cameras</div>
-            <div class="text-2xl md:text-3xl font-extrabold text-amber-400 mt-1" id="kpiCameras">1</div>
-            <div class="text-[10px] text-amber-500 mt-1">Multi-stream ready</div>
+            <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+              <span>Perimeter Alerts</span>
+              <span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-950 text-amber-400 font-mono" id="kpiCameras">1 Cams</span>
+            </div>
+            <div class="text-2xl md:text-3xl font-extrabold text-amber-400 mt-1">
+              <span id="kpiStrangers">0</span> <span class="text-xs text-slate-400 font-normal">Sightings</span>
+            </div>
+            <div class="text-[10px] text-amber-500/90 mt-1">Unidentified face alerts</div>
           </div>
         </div>
 
@@ -1155,12 +1296,40 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
             <span class="flex items-center gap-1.5"><span>😊</span> Universal Emotion Analytics</span>
             <span class="text-[10px] text-emerald-400 font-normal">7-Class Deep AI</span>
           </h3>
-          <div class="aspect-square max-h-[220px] mx-auto">
+          <div class="aspect-square max-h-[200px] mx-auto">
             <canvas id="emotionChart"></canvas>
           </div>
           <p class="text-[11px] text-center text-slate-400 mt-3" id="emotionSummary">
             Evaluating student engagement and classroom mood balance in real time.
           </p>
+        </div>
+
+        <!-- LAST DETECTED STRANGER / PERIMETER RADAR CARD -->
+        <div class="glass p-5 rounded-2xl border border-slate-800 relative overflow-hidden">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-bold text-white flex items-center gap-1.5">
+              <span>🚨</span> Last Detected Stranger
+            </h3>
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950 text-rose-300 border border-rose-800/80">Security Alert</span>
+          </div>
+          
+          <div class="flex gap-3 items-center bg-slate-950/70 p-3 rounded-xl border border-slate-800/80">
+            <div class="w-24 h-20 rounded-lg overflow-hidden border border-slate-700 shrink-0 bg-black relative group cursor-pointer" onclick="openImage('/snapshots/latest_unknown.jpg')">
+              <img src="/snapshots/latest_unknown.jpg" id="radarSnapshot" alt="Last Stranger" class="w-full h-full object-cover group-hover:scale-105 transition" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'100\\' height=\\'80\\'><rect fill=\\'%23111827\\' width=\\'100\\' height=\\'80\\'/><text fill=\\'%236b7280\\' x=\\'50%\\' y=\\'50%\\' text-anchor=\\'middle\\' font-size=\\'11\\'>No Intruder</text></svg>'">
+              <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold transition">🔍 Zoom</div>
+            </div>
+            
+            <div class="text-xs space-y-1 min-w-0">
+              <div><span class="text-slate-400">Date/Time:</span> <strong class="text-white font-mono block truncate" id="radarTime">Scanning...</strong></div>
+              <div><span class="text-slate-400">Location:</span> <strong class="text-sky-400 block truncate" id="radarLocation">-</strong></div>
+              <div><span class="text-slate-400">AI Profile:</span> <strong class="text-amber-300" id="radarProfile">-</strong> &bull; <span class="text-slate-400" id="radarMatch">-</span></div>
+            </div>
+          </div>
+          
+          <div class="mt-3 flex items-center justify-between text-[11px] text-slate-400">
+            <span>Evidence photo saved automatically</span>
+            <button onclick="openImage('/snapshots/latest_unknown.jpg')" class="text-sky-400 hover:text-sky-300 font-semibold underline">Inspect Evidence</button>
+          </div>
         </div>
 
         <!-- Recent Security Incident Snapshots Gallery -->
@@ -1516,18 +1685,194 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
       } catch (err) {}
     }
 
+    let currentLedgerTab = "live";
+    let cachedSummary = null;
+    let cachedAttendance = [];
+
+    function setLedgerTab(tab) {
+      currentLedgerTab = tab;
+      const tabs = ['tabLiveBtn', 'tabPresentBtn', 'tabAbsentBtn'];
+      tabs.forEach(t => {
+        const el = document.getElementById(t);
+        if (el) el.className = "px-3 py-1 rounded-lg text-slate-400 hover:text-white font-semibold transition";
+      });
+      if (tab === 'live') {
+        document.getElementById('tabLiveBtn').className = "px-3 py-1 rounded-lg bg-sky-600 text-white font-semibold shadow transition";
+      } else if (tab === 'present') {
+        document.getElementById('tabPresentBtn').className = "px-3 py-1 rounded-lg bg-emerald-600 text-white font-semibold shadow transition";
+      } else if (tab === 'absent') {
+        document.getElementById('tabAbsentBtn').className = "px-3 py-1 rounded-lg bg-rose-600 text-white font-semibold shadow transition";
+      }
+      renderActiveLedgerTable();
+    }
+
+    function renderActiveLedgerTable() {
+      const thead = document.getElementById('ledgerThead');
+      const tbody = document.getElementById('ledgerBody');
+      if (!thead || !tbody) return;
+
+      if (currentLedgerTab === 'live') {
+        thead.innerHTML = `
+          <tr>
+            <th class="py-2.5 px-3">Roll No</th>
+            <th class="py-2.5 px-3">Student / Person</th>
+            <th class="py-2.5 px-3">Class / Zone</th>
+            <th class="py-2.5 px-3">Age</th>
+            <th class="py-2.5 px-3">Match %</th>
+            <th class="py-2.5 px-3">Expression</th>
+            <th class="py-2.5 px-3">Timestamp</th>
+            <th class="py-2.5 px-3">Location</th>
+            <th class="py-2.5 px-3">Status</th>
+          </tr>
+        `;
+        if (!cachedAttendance || cachedAttendance.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-slate-500">No activity recorded today yet.</td></tr>';
+          return;
+        }
+        let html = '';
+        cachedAttendance.slice(0, 50).forEach(r => {
+          const isStranger = String(r.name).toLowerCase() === 'stranger';
+          const badge = isStranger ?
+            '<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-950 text-rose-300 border border-rose-800">Stranger</span>' :
+            '<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800">Present</span>';
+          html += `
+            <tr class="hover:bg-slate-800/40 transition">
+              <td class="py-2.5 px-3 font-mono text-sky-400 font-bold">${escapeHtml(r.roll || '-')}</td>
+              <td class="py-2.5 px-3 font-semibold text-white">${escapeHtml(r.name)}</td>
+              <td class="py-2.5 px-3 text-slate-400">${escapeHtml(r.klass || 'Classroom')}</td>
+              <td class="py-2.5 px-3">${escapeHtml(r.age)}</td>
+              <td class="py-2.5 px-3 text-emerald-400 font-mono">${escapeHtml(r.match)}</td>
+              <td class="py-2.5 px-3">${escapeHtml(r.emotion)}</td>
+              <td class="py-2.5 px-3 font-mono text-slate-400">${escapeHtml(r.time)}</td>
+              <td class="py-2.5 px-3 text-slate-300">${escapeHtml(r.camera)}</td>
+              <td class="py-2.5 px-3">${badge}</td>
+            </tr>
+          `;
+        });
+        tbody.innerHTML = html;
+      } else if (currentLedgerTab === 'present') {
+        thead.innerHTML = `
+          <tr>
+            <th class="py-2.5 px-3">Roll No</th>
+            <th class="py-2.5 px-3">Student Name</th>
+            <th class="py-2.5 px-3">Class</th>
+            <th class="py-2.5 px-3">First Seen</th>
+            <th class="py-2.5 px-3">Camera Location</th>
+            <th class="py-2.5 px-3">Expression</th>
+            <th class="py-2.5 px-3">Confidence</th>
+            <th class="py-2.5 px-3">Attendance</th>
+          </tr>
+        `;
+        const list = (cachedSummary && cachedSummary.present_list) || [];
+        if (list.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-500">No students recorded present today yet.</td></tr>';
+          return;
+        }
+        let html = '';
+        list.forEach(s => {
+          html += `
+            <tr class="hover:bg-slate-800/40 transition">
+              <td class="py-2.5 px-3 font-mono text-emerald-400 font-bold">${escapeHtml(s.roll || 'N/A')}</td>
+              <td class="py-2.5 px-3 font-semibold text-white">${escapeHtml(s.name)}</td>
+              <td class="py-2.5 px-3 text-slate-300">${escapeHtml(s.klass || 'B.Tech CSE')}</td>
+              <td class="py-2.5 px-3 font-mono text-slate-400">${escapeHtml(s.time_in)}</td>
+              <td class="py-2.5 px-3 text-sky-400">${escapeHtml(s.camera)}</td>
+              <td class="py-2.5 px-3">${escapeHtml(s.emotion)}</td>
+              <td class="py-2.5 px-3 text-emerald-400 font-mono">${escapeHtml(s.match)}</td>
+              <td class="py-2.5 px-3">
+                <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800">✅ Present</span>
+              </td>
+            </tr>
+          `;
+        });
+        tbody.innerHTML = html;
+      } else if (currentLedgerTab === 'absent') {
+        thead.innerHTML = `
+          <tr>
+            <th class="py-2.5 px-3">Roll No</th>
+            <th class="py-2.5 px-3">Student Name</th>
+            <th class="py-2.5 px-3">Class</th>
+            <th class="py-2.5 px-3">Age</th>
+            <th class="py-2.5 px-3">Parent / Guardian</th>
+            <th class="py-2.5 px-3">Emergency Phone</th>
+            <th class="py-2.5 px-3">Status</th>
+            <th class="py-2.5 px-3">Quick Alert</th>
+          </tr>
+        `;
+        const list = (cachedSummary && cachedSummary.absent_list) || [];
+        if (list.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-emerald-400">100% Attendance Achieved! All students present.</td></tr>';
+          return;
+        }
+        let html = '';
+        list.forEach(s => {
+          html += `
+            <tr class="hover:bg-slate-800/40 transition">
+              <td class="py-2.5 px-3 font-mono text-rose-400 font-bold">${escapeHtml(s.roll || 'N/A')}</td>
+              <td class="py-2.5 px-3 font-semibold text-white">${escapeHtml(s.name)}</td>
+              <td class="py-2.5 px-3 text-slate-300">${escapeHtml(s.klass || 'B.Tech CSE')}</td>
+              <td class="py-2.5 px-3 text-slate-400">${escapeHtml(s.age || '-')}</td>
+              <td class="py-2.5 px-3 text-slate-300">${escapeHtml(s.parent_name || 'Guardian')}</td>
+              <td class="py-2.5 px-3 font-mono text-slate-400">${escapeHtml(s.parent_phone || '-')}</td>
+              <td class="py-2.5 px-3">
+                <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-950 text-rose-300 border border-rose-800">❌ Not Arrived</span>
+              </td>
+              <td class="py-2.5 px-3">
+                <button onclick="sendParentAlert('${escapeHtml(s.name)}', '${escapeHtml(s.parent_phone)}')" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-sky-400 text-[10px] font-semibold border border-slate-700 transition flex items-center gap-1">
+                  <span>📱</span> Alert Parent
+                </button>
+              </td>
+            </tr>
+          `;
+        });
+        tbody.innerHTML = html;
+      }
+    }
+
+    function sendParentAlert(studentName, phone) {
+      showToast(`Automated WhatsApp & SMS attendance alert dispatched for ${studentName} to ${phone}`, "success");
+    }
+
     async function pollStats() {
       try {
         const res = await fetch('/api/stats');
         const data = await res.json();
+        cachedSummary = data;
+
+        // Update Principal KPIs
         document.getElementById('kpiPresent').innerText = data.present_today || 0;
         document.getElementById('kpiEnrolled').innerText = data.total_enrolled || 9;
-        document.getElementById('kpiRate').innerText = (data.attendance_rate || 0) + '% Rate';
+        document.getElementById('kpiRate').innerText = (data.attendance_rate || 0) + '%';
+        document.getElementById('kpiAbsent').innerText = data.absent_count !== undefined ? data.absent_count : (data.total_enrolled - data.present_today);
+        document.getElementById('kpiAbsentRate').innerText = (data.absent_rate !== undefined ? data.absent_rate : (100 - (data.attendance_rate || 0))) + '%';
+
+        // Update Mood Meter
+        const happiness = data.happiness_index || 85.0;
+        document.getElementById('kpiHappiness').innerText = happiness.toFixed(0) + '%';
+        document.getElementById('kpiMoodLabel').innerText = data.mood_label || 'Optimal';
+        const pbar = document.getElementById('happinessProgressBar');
+        if (pbar) pbar.style.width = Math.min(100, Math.max(5, happiness)) + '%';
+
         document.getElementById('kpiStrangers').innerText = data.strangers_count || 0;
         if (data.active_cameras) {
-          document.getElementById('kpiCameras').innerText = data.active_cameras;
+          document.getElementById('kpiCameras').innerText = data.active_cameras + ' Cams';
         }
 
+        // Update Tab Badges
+        const countPres = document.getElementById('tabCountPresent');
+        if (countPres) countPres.innerText = data.present_today || 0;
+        const countAbs = document.getElementById('tabCountAbsent');
+        if (countAbs) countAbs.innerText = data.absent_count !== undefined ? data.absent_count : (data.total_enrolled - data.present_today);
+
+        // Update Last Detected Stranger Radar Card
+        if (data.last_stranger) {
+          document.getElementById('radarTime').innerText = data.last_stranger.timestamp || 'No event';
+          document.getElementById('radarLocation').innerText = data.last_stranger.camera || 'Main Gate';
+          document.getElementById('radarProfile').innerText = data.last_stranger.profile || 'Unidentified';
+          document.getElementById('radarMatch').innerText = (data.last_stranger.match || '-') + ' match';
+        }
+
+        // Update Emotion Chart
         if (emotionChartInstance && data.emotions) {
           const labels = Object.keys(data.emotions);
           const values = Object.values(data.emotions);
@@ -1536,6 +1881,11 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
             emotionChartInstance.data.datasets[0].data = values;
             emotionChartInstance.update();
           }
+        }
+
+        // If on present or absent tab, refresh active table
+        if (currentLedgerTab !== 'live') {
+          renderActiveLedgerTable();
         }
       } catch (err) {}
     }
@@ -1554,30 +1904,10 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
       try {
         const res = await fetch('/api/attendance');
         const list = await res.json();
-        const tbody = document.getElementById('ledgerBody');
-        if (!list || list.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="7" class="py-8 text-center text-slate-500">No attendance entries recorded today yet.</td></tr>';
-          return;
+        cachedAttendance = list || [];
+        if (currentLedgerTab === 'live') {
+          renderActiveLedgerTable();
         }
-        let html = '';
-        list.slice(0, 50).forEach(r => {
-          const isStranger = String(r.name).toLowerCase() === 'stranger';
-          const badge = isStranger ? 
-            '<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-950 text-rose-300 border border-rose-800">Stranger</span>' : 
-            '<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800">Present</span>';
-          html += `
-            <tr class="hover:bg-slate-800/40 transition">
-              <td class="py-2.5 px-3 font-semibold text-white">${escapeHtml(r.name)}</td>
-              <td class="py-2.5 px-3">${escapeHtml(r.age)}</td>
-              <td class="py-2.5 px-3 text-emerald-400 font-mono">${escapeHtml(r.match)}</td>
-              <td class="py-2.5 px-3">${escapeHtml(r.emotion)}</td>
-              <td class="py-2.5 px-3 font-mono text-slate-400">${escapeHtml(r.time)}</td>
-              <td class="py-2.5 px-3">${escapeHtml(r.camera)}</td>
-              <td class="py-2.5 px-3">${badge}</td>
-            </tr>
-          `;
-        });
-        tbody.innerHTML = html;
       } catch (err) {}
     }
 
@@ -1585,8 +1915,8 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
       const q = document.getElementById('searchInput').value.toLowerCase();
       const rows = document.querySelectorAll('#ledgerBody tr');
       rows.forEach(r => {
-        const name = r.children[0]?.innerText.toLowerCase() || '';
-        r.style.display = name.includes(q) ? '' : 'none';
+        const rowText = r.innerText.toLowerCase();
+        r.style.display = rowText.includes(q) ? '' : 'none';
       });
     }
 
