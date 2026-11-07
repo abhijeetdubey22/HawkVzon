@@ -237,12 +237,28 @@ class VisionWorker:
         self.camera_mode = "Classroom (Indoor / Standard)"
         self.zoom = 1.0
         self.lock = threading.Lock()
+        self.ai_lock = threading.Lock()
+        self.latest_raw_frame = None
+        self.cached_faces = []
         self.load_config()
 
         # Load database safely (support encrypted .face files and fallback to .npy)
-        import face_recognition
+        try:
+            import face_recognition
+            self.face_recognition = face_recognition
+            print("  [AI ENGINE] face_recognition (dlib) loaded successfully for biometric recognition.")
+        except Exception as e:
+            self.face_recognition = None
+            print(f"  [AI NOTICE] face_recognition / dlib not loaded: {e}")
+            print("  [AI ACTIVE] Activated OpenCV High-Performance Cascade Engine for face tracking & emotion analysis.")
+
+        try:
+            cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+            self.face_cascade = cv2.CascadeClassifier(cascade_path)
+        except Exception:
+            self.face_cascade = None
+
         from emotion_predictor import EmotionClassifier
-        self.face_recognition = face_recognition
 
         faces_dir = os.path.join(BASE_DIR, "faces")
         self.known_encodings, self.known_names, self.known_ages = load_known_faces(faces_dir)
@@ -279,7 +295,9 @@ class VisionWorker:
                 print(f"[Config Load Error] {e}")
 
     def start(self):
-        threading.Thread(target=self._run, daemon=True, name="VisionWorkerThread").start()
+        threading.Thread(target=self._capture_loop, daemon=True, name="CamCaptureThread").start()
+        threading.Thread(target=self._ai_worker_loop, daemon=True, name="CamAIWorkerThread").start()
+        threading.Thread(target=self._render_loop, daemon=True, name="CamRenderThread").start()
 
     def _open_camera(self):
         with self.lock:
@@ -291,8 +309,25 @@ class VisionWorker:
                 self.cap = None
             try:
                 if isinstance(self.source, int) and os.name == "nt":
-                    self.cap = cv2.VideoCapture(self.source, cv2.CAP_DSHOW)
-                    if not self.cap.isOpened():
+                    # Try DSHOW, MSMF, and default backend sequentially to find working video stream
+                    backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF, None]
+                    opened = False
+                    for b in backends:
+                        try:
+                            cap_test = cv2.VideoCapture(self.source, b) if b is not None else cv2.VideoCapture(self.source)
+                            if cap_test is not None and cap_test.isOpened():
+                                ret_test, f_test = cap_test.read()
+                                if ret_test and f_test is not None and f_test.size > 0:
+                                    self.cap = cap_test
+                                    opened = True
+                                    break
+                                else:
+                                    # Fallback device if opened
+                                    self.cap = cap_test
+                                    opened = True
+                        except Exception:
+                            continue
+                    if not opened:
                         self.cap = cv2.VideoCapture(self.source)
                 elif isinstance(self.source, str) and (self.source.startswith("rtsp") or self.source.startswith("http")):
                     os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|buffer_size;1024000|max_delay;500000|stimeout;3000000"
@@ -304,8 +339,14 @@ class VisionWorker:
 
                 if self.cap is not None and self.cap.isOpened():
                     self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    # Try setting 1280x720, check if frame still reads
                     self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
                     self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+                    ret_chk, f_chk = self.cap.read()
+                    if not ret_chk or f_chk is None:
+                        # Reset to default native camera resolution (640x480)
+                        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
                     return True
             except Exception as e:
                 print(f"[Camera Open Error] {e}")
@@ -381,135 +422,145 @@ class VisionWorker:
             return fname
         return None
 
-    def _run(self):
-        global current_jpeg_frame, latest_telemetry
+    def _capture_loop(self):
+        """Dedicated high-speed frame grabber. Clears hardware buffers to ensure zero video lag."""
         self._open_camera()
-
-        prev_time = time.time()
-        fps = 0.0
-        cached_faces = []
-        frame_idx = 0
         consecutive_failures = 0
 
         while self.running:
             if self.cap is None or not self.cap.isOpened():
-                with telemetry_lock:
-                    latest_telemetry["status"] = "Connecting..."
-                standby = np.zeros((720, 1280, 3), dtype=np.uint8)
-                standby[:] = (15, 23, 42)  # Slate 900 background
-                cv2.putText(standby, "CAMERA CONNECTING / STANDBY", (370, 330), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (148, 163, 184), 2)
-                cv2.putText(standby, f"Target: {self.camera_name} [{self.camera_mode}]", (350, 380), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (56, 189, 248), 1)
-                cv2.putText(standby, "Select another camera or click Reconnect if offline...", (360, 420), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (100, 116, 139), 1)
-                ret_enc, jpeg = cv2.imencode(".jpg", standby, [cv2.IMWRITE_JPEG_QUALITY, 75])
-                if ret_enc:
-                    with video_lock:
-                        current_jpeg_frame = jpeg.tobytes()
-                # Cooldown loop before retrying camera connection
-                for _ in range(4):
-                    if not self.running:
-                        break
-                    time.sleep(0.5)
-                if self.running:
-                    self._open_camera()
+                time.sleep(0.5)
+                self._open_camera()
                 continue
 
             ret, frame = self.cap.read()
             if not ret or frame is None:
                 consecutive_failures += 1
                 if consecutive_failures >= 30:
-                    with telemetry_lock:
-                        latest_telemetry["status"] = "Signal Lost (Reconnecting)"
-                    if self.cap is not None:
-                        try:
-                            self.cap.release()
-                        except Exception:
-                            pass
-                    self.cap = None
+                    with self.lock:
+                        if self.cap:
+                            try:
+                                self.cap.release()
+                            except Exception:
+                                pass
+                        self.cap = None
                     consecutive_failures = 0
-                time.sleep(0.05)
+                time.sleep(0.01)
                 continue
 
             consecutive_failures = 0
-            with telemetry_lock:
-                latest_telemetry["status"] = "Live"
+            with self.lock:
+                self.latest_raw_frame = frame
+            time.sleep(0.003)
 
-            # Apply digital zoom crop
-            if getattr(self, "zoom", 1.0) > 1.0:
-                zh, zw = frame.shape[:2]
-                cw, ch = int(zw / self.zoom), int(zh / self.zoom)
-                cx, cy = zw // 2, zh // 2
-                x1 = max(0, min(zw - cw, cx - cw // 2))
-                y1 = max(0, min(zh - ch, cy - ch // 2))
-                frame = cv2.resize(frame[y1:y1 + ch, x1:x1 + cw], (zw, zh), interpolation=cv2.INTER_LINEAR)
+    def _ai_worker_loop(self):
+        """Asynchronous background AI inference worker. Runs face detection & emotion classification without blocking video."""
+        scale = 0.35
+        inv_scale = 1.0 / scale
 
-            frame_idx += 1
-            now = time.time()
-            fps = 0.9 * fps + 0.1 * (1.0 / max(now - prev_time, 1e-5))
-            prev_time = now
+        while self.running:
+            with self.lock:
+                frame_to_process = self.latest_raw_frame.copy() if self.latest_raw_frame is not None else None
 
-            # Determine mode scale
-            is_outdoor = "outdoor" in self.camera_mode.lower() or "gate" in self.camera_mode.lower()
-            is_corridor = "corridor" in self.camera_mode.lower() or "transit" in self.camera_mode.lower()
-            is_principal = "principal" in self.camera_mode.lower() or "principal" in self.camera_name.lower()
+            if frame_to_process is None:
+                time.sleep(0.05)
+                continue
 
-            process_interval = 2 if is_corridor else 3
-            detection_scale = 0.70 if is_outdoor else 0.50
-            inv_scale = 1.0 / detection_scale
-
-            # Run heavy AI detection on interval
-            if frame_idx % process_interval == 0:
-                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                small = cv2.resize(rgb, (0, 0), fx=detection_scale, fy=detection_scale)
-                face_locs_small = self.face_recognition.face_locations(small, number_of_times_to_upsample=1, model="hog")
-
+            try:
+                h, w = frame_to_process.shape[:2]
                 full_locs = []
-                for loc in face_locs_small:
-                    t, r, b, l = loc
-                    full_locs.append((
-                        int(max(0, t * inv_scale)),
-                        int(min(rgb.shape[1], r * inv_scale)),
-                        int(min(rgb.shape[0], b * inv_scale)),
-                        int(max(0, l * inv_scale))
-                    ))
+                encodings = []
 
-                # Compute encodings on full resolution
-                encodings = self.face_recognition.face_encodings(rgb, full_locs)
+                if self.face_recognition is not None:
+                    try:
+                        rgb = cv2.cvtColor(frame_to_process, cv2.COLOR_BGR2RGB)
+                        small = cv2.resize(rgb, (0, 0), fx=scale, fy=scale)
+                        face_locs_small = self.face_recognition.face_locations(small, number_of_times_to_upsample=0, model="hog")
+                        for loc in face_locs_small:
+                            t, r, b, l = loc
+                            full_locs.append((
+                                int(max(0, t * inv_scale)),
+                                int(min(w, r * inv_scale)),
+                                int(min(h, b * inv_scale)),
+                                int(max(0, l * inv_scale))
+                            ))
+                        # Limit to at most 4 faces for encodings to prevent CPU choke
+                        full_locs = full_locs[:4]
+                        encodings = self.face_recognition.face_encodings(rgb, full_locs)
+                    except Exception:
+                        full_locs = []
+                        encodings = []
+
+                # Fallback to OpenCV Haar Cascade if face_recognition returned no faces or is unavailable
+                if not full_locs and self.face_cascade is not None:
+                    try:
+                        gray = cv2.cvtColor(frame_to_process, cv2.COLOR_BGR2GRAY)
+                        small_gray = cv2.resize(gray, (0, 0), fx=scale, fy=scale)
+                        detected = self.face_cascade.detectMultiScale(
+                            small_gray,
+                            scaleFactor=1.20,
+                            minNeighbors=4,
+                            minSize=(26, 26)
+                        )
+                        for (fx, fy, fw, fh) in detected[:6]:
+                            full_locs.append((
+                                int(fy * inv_scale),
+                                int((fx + fw) * inv_scale),
+                                int((fy + fh) * inv_scale),
+                                int(fx * inv_scale)
+                            ))
+                        encodings = [None] * len(full_locs)
+                    except Exception:
+                        pass
+
                 new_faces = []
+                is_principal = "principal" in self.camera_mode.lower() or "principal" in self.camera_name.lower()
 
                 for enc, loc in zip(encodings, full_locs):
-                    if len(self.known_encodings) > 0:
-                        dist = self.face_recognition.face_distance(self.known_encodings, enc)
-                        best_idx = np.argmin(dist) if len(dist) > 0 else -1
-                        confidence = (1 - dist[best_idx]) * 100 if best_idx >= 0 else 0
-                    else:
-                        dist = np.empty((0,))
-                        best_idx = -1
-                        confidence = 0
-
                     t, r, b, l = loc
-                    roi = frame[t:b, l:r]
-                    name = "Stranger"
-                    age = "-"
-                    color = (0, 0, 255)  # Red
+                    t = max(0, min(h - 1, t))
+                    b = max(t + 1, min(h, b))
+                    l = max(0, min(w - 1, l))
+                    r = max(l + 1, min(w, r))
+                    roi = frame_to_process[t:b, l:r]
 
-                    if best_idx >= 0 and confidence >= 50.0:
-                        name = str(self.known_names[best_idx])
-                        age = str(self.known_ages[best_idx]) if best_idx < len(self.known_ages) else "-"
-                        color = (0, 255, 0)  # Green
+                    name = "Subject"
+                    age = "-"
+                    color = (255, 140, 0)
+                    confidence = 0
+
+                    if enc is not None and self.face_recognition is not None:
+                        if len(self.known_encodings) > 0:
+                            dist = self.face_recognition.face_distance(self.known_encodings, enc)
+                            best_idx = np.argmin(dist) if len(dist) > 0 else -1
+                            confidence = (1 - dist[best_idx]) * 100 if best_idx >= 0 else 0
+                        else:
+                            best_idx = -1
+                            confidence = 0
+
+                        if best_idx >= 0 and confidence >= 50.0:
+                            name = str(self.known_names[best_idx])
+                            age = str(self.known_ages[best_idx]) if best_idx < len(self.known_ages) else "-"
+                            color = (0, 255, 0)
+                        else:
+                            name = "Stranger"
+                            color = (0, 0, 255)
+                    else:
+                        name = "Face Detected"
+                        color = (0, 255, 180)
 
                     # Emotion inference
                     emotion_str = "Neutral"
                     if roi.size > 0 and self.emotion_classifier is not None:
                         try:
-                            gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-                            resized = cv2.resize(gray, (48, 48))
-                            norm = resized.astype("float32") / 255.0
+                            gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+                            resized_roi = cv2.resize(gray_roi, (48, 48))
+                            norm = resized_roi.astype("float32") / 255.0
                             label, conf, _ = self.emotion_classifier.predict(norm)
                             emotion_str = label
                         except Exception:
                             pass
 
-                    # Bounding Box label
                     label_text = f"{name} ({age}) | {emotion_str}"
                     if is_principal and name == "Stranger":
                         label_text = f"[RESTRICTED] {name} | {emotion_str}"
@@ -525,7 +576,7 @@ class VisionWorker:
 
                     # Log recognized face with 30s cooldown
                     now_ts = time.time()
-                    if name != "Stranger" and (now_ts - self.last_logged.get(name, 0) > 30.0):
+                    if name not in ("Stranger", "Subject", "Face Detected") and (now_ts - self.last_logged.get(name, 0) > 30.0):
                         self.last_logged[name] = now_ts
                         timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         try:
@@ -541,37 +592,97 @@ class VisionWorker:
                         prefix = "principal_intrusion" if is_principal else "unknown"
                         snap_name = f"{prefix}_{time_str}.jpg"
                         try:
-                            cv2.imwrite(os.path.join(SNAPSHOTS_DIR, snap_name), frame)
-                            cv2.imwrite(os.path.join(SNAPSHOTS_DIR, "latest_unknown.jpg"), frame)
+                            cv2.imwrite(os.path.join(SNAPSHOTS_DIR, snap_name), frame_to_process)
+                            cv2.imwrite(os.path.join(SNAPSHOTS_DIR, "latest_unknown.jpg"), frame_to_process)
                         except Exception:
                             pass
 
-                cached_faces = new_faces
+                with self.ai_lock:
+                    self.cached_faces = new_faces
 
                 # Update live telemetry
                 with telemetry_lock:
-                    latest_telemetry["faces_detected"] = len(cached_faces)
-                    if cached_faces:
-                        latest_telemetry["last_seen_name"] = cached_faces[0]["name"]
-                        latest_telemetry["last_seen_emotion"] = cached_faces[0]["emotion"]
+                    latest_telemetry["faces_detected"] = len(new_faces)
+                    if new_faces:
+                        latest_telemetry["last_seen_name"] = new_faces[0]["name"]
+                        latest_telemetry["last_seen_emotion"] = new_faces[0]["emotion"]
 
-            # Draw AI bounding boxes with high-contrast 2-pass outline
-            for face in cached_faces:
+            except Exception:
+                pass
+
+            time.sleep(0.08)
+
+    def _render_loop(self):
+        """Dedicated real-time display & streaming renderer. Delivers butter-smooth 30+ FPS video with HUD telemetry."""
+        global current_jpeg_frame, latest_telemetry
+        prev_time = time.time()
+        fps = 30.0
+
+        while self.running:
+            with self.lock:
+                frame = self.latest_raw_frame.copy() if self.latest_raw_frame is not None else None
+
+            if frame is None:
+                with telemetry_lock:
+                    latest_telemetry["status"] = "Connecting..."
+                standby = np.zeros((480, 854, 3), dtype=np.uint8)
+                standby[:] = (15, 23, 42)
+                cv2.putText(standby, "CAMERA CONNECTING / STANDBY", (240, 220), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (148, 163, 184), 2)
+                cv2.putText(standby, f"Target: {self.camera_name}", (280, 260), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (56, 189, 248), 1)
+                ret_enc, jpeg = cv2.imencode(".jpg", standby, [cv2.IMWRITE_JPEG_QUALITY, 68])
+                if ret_enc:
+                    with video_lock:
+                        current_jpeg_frame = jpeg.tobytes()
+                time.sleep(0.1)
+                continue
+
+            with telemetry_lock:
+                latest_telemetry["status"] = "Live"
+
+            now = time.time()
+            fps = 0.9 * fps + 0.1 * (1.0 / max(now - prev_time, 1e-5))
+            prev_time = now
+
+            # Apply digital zoom crop
+            if getattr(self, "zoom", 1.0) > 1.0:
+                zh, zw = frame.shape[:2]
+                cw, ch = int(zw / self.zoom), int(zh / self.zoom)
+                cx, cy = zw // 2, zh // 2
+                x1 = max(0, min(zw - cw, cx - cw // 2))
+                y1 = max(0, min(zh - ch, cy - ch // 2))
+                frame = cv2.resize(frame[y1:y1 + ch, x1:x1 + cw], (zw, zh), interpolation=cv2.INTER_LINEAR)
+
+            # Check if camera frame is pitch black
+            if frame.mean() < 2.5:
+                zh, zw = frame.shape[:2]
+                cv2.putText(frame, "[CAMERA SENSOR OUTPUTTING BLACK]", (int(zw * 0.08), int(zh * 0.40)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 165, 255), 2)
+                cv2.putText(frame, "1. Open physical privacy slider / cover on webcam lens", (int(zw * 0.08), int(zh * 0.48)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.50, (220, 220, 220), 1)
+                cv2.putText(frame, "2. Check Windows Settings -> Privacy -> Camera access", (int(zw * 0.08), int(zh * 0.55)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.50, (220, 220, 220), 1)
+                cv2.putText(frame, "3. Switch to 'Webcam 1' in the camera dropdown above", (int(zw * 0.08), int(zh * 0.62)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.50, (100, 200, 255), 1)
+
+            # Draw AI bounding boxes from cached_faces
+            with self.ai_lock:
+                faces_to_draw = list(self.cached_faces)
+
+            for face in faces_to_draw:
                 l, t, r, b = face["box"]
                 color = face["color"]
                 label = face["label"]
                 cv2.rectangle(frame, (l, t), (r, b), color, 2)
-                y_pos = max(24, t - 10)
-                # 2-pass black stroke for readability
-                cv2.putText(frame, label, (l, y_pos), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 4)
-                cv2.putText(frame, label, (l, y_pos), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)
+                y_pos = max(20, t - 8)
+                cv2.putText(frame, label, (l, y_pos), cv2.FONT_HERSHEY_SIMPLEX, 0.50, (0, 0, 0), 3)
+                cv2.putText(frame, label, (l, y_pos), cv2.FONT_HERSHEY_SIMPLEX, 0.50, color, 1)
 
-            # Draw FPS, Zoom, & Mode Watermark
-            watermark = f"FPS: {fps:.1f} | {self.camera_name} [{self.camera_mode.split(' ')[0]}]"
+            # Draw Watermark
+            watermark = f"FPS: {fps:.1f} | {self.camera_name}"
             if self.zoom > 1.0:
-                watermark += f" | {self.zoom:.1f}x Zoom"
-            cv2.putText(frame, watermark, (16, 32), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 0, 0), 4)
-            cv2.putText(frame, watermark, (16, 32), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 255), 2)
+                watermark += f" | {self.zoom:.1f}x"
+            cv2.putText(frame, watermark, (12, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 3)
+            cv2.putText(frame, watermark, (12, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 255), 1)
 
             with telemetry_lock:
                 latest_telemetry["fps"] = round(fps, 1)
@@ -580,13 +691,13 @@ class VisionWorker:
                 latest_telemetry["camera_mode"] = self.camera_mode
                 latest_telemetry["zoom"] = self.zoom
 
-            # Encode frame to JPEG
-            ret_enc, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 78])
+            # High-speed JPEG encoding
+            ret_enc, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 68])
             if ret_enc:
                 with video_lock:
                     current_jpeg_frame = jpeg.tobytes()
 
-            time.sleep(0.005)
+            time.sleep(0.025)
 
 # --------------------------------------------------------------------------
 # Modern Web Dashboard HTTP Request Handler

@@ -34,4 +34,5 @@ exports/
 temp_*
 scratch/
 .agents/
+.vscode/
 
