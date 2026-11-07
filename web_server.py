@@ -295,7 +295,7 @@ class VisionWorker:
                     if not self.cap.isOpened():
                         self.cap = cv2.VideoCapture(self.source)
                 elif isinstance(self.source, str) and (self.source.startswith("rtsp") or self.source.startswith("http")):
-                    os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|buffer_size;1024000|max_delay;500000"
+                    os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|buffer_size;1024000|max_delay;500000|stimeout;3000000"
                     self.cap = cv2.VideoCapture(self.source, cv2.CAP_FFMPEG)
                     if not self.cap.isOpened():
                         self.cap = cv2.VideoCapture(self.source)
@@ -404,8 +404,13 @@ class VisionWorker:
                 if ret_enc:
                     with video_lock:
                         current_jpeg_frame = jpeg.tobytes()
-                time.sleep(1.0)
-                self._open_camera()
+                # Cooldown loop before retrying camera connection
+                for _ in range(4):
+                    if not self.running:
+                        break
+                    time.sleep(0.5)
+                if self.running:
+                    self._open_camera()
                 continue
 
             ret, frame = self.cap.read()
@@ -592,11 +597,14 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
         return
 
     def send_json(self, data, code=200):
-        self.send_response(code)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.end_headers()
-        self.wfile.write(json.dumps(data).encode("utf-8"))
+        try:
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps(data).encode("utf-8"))
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+            pass
 
     def read_post_json(self):
         try:
@@ -614,24 +622,29 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
         qs = parse_qs(parsed.query)
 
         if path in ("/", "/index.html"):
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.end_headers()
-            self.wfile.write(self.render_dashboard().encode("utf-8"))
+            try:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(self.render_dashboard().encode("utf-8"))
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+                pass
 
         elif path == "/video_feed":
-            self.send_response(200)
-            self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
-            self.send_header("Cache-Control", "no-cache, private")
-            self.end_headers()
             try:
+                self.send_response(200)
+                self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+                self.send_header("Cache-Control", "no-cache, private")
+                self.end_headers()
                 while True:
                     with video_lock:
                         frame = current_jpeg_frame
                     if frame is not None:
                         self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
                     time.sleep(0.033)  # ~30 FPS
-            except (BrokenPipeError, ConnectionResetError):
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+                pass
+            except Exception:
                 pass
 
         elif path == "/api/telemetry":
@@ -1963,6 +1976,18 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
 </html>
         """
 
+class QuietThreadingHTTPServer(ThreadingHTTPServer):
+    """Threading HTTP server that suppresses routine client disconnect exceptions on Windows."""
+    daemon_threads = True
+
+    def handle_error(self, request, client_address):
+        exctype, val, tb = sys.exc_info()
+        if exctype in (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            return
+        if isinstance(val, OSError) and getattr(val, "winerror", None) in (10053, 10054):
+            return
+        super().handle_error(request, client_address)
+
 def run_server(port=5000):
     global vision_worker
     print("=" * 65)
@@ -1977,7 +2002,7 @@ def run_server(port=5000):
     vision_worker = VisionWorker()
     vision_worker.start()
 
-    server = ThreadingHTTPServer(("0.0.0.0", port), CommandCenterHandler)
+    server = QuietThreadingHTTPServer(("0.0.0.0", port), CommandCenterHandler)
     try:
         import webbrowser
         webbrowser.open(f"http://localhost:{port}")
