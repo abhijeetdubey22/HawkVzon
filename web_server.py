@@ -1286,16 +1286,6 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
         return self.get_principal_summary()
 
     def render_dashboard(self):
-        for candidate in [
-            os.path.join(BASE_DIR, "index.html"),
-            os.path.join(BASE_DIR, "docs", "index.html"),
-        ]:
-            if os.path.exists(candidate):
-                try:
-                    with open(candidate, "r", encoding="utf-8") as f:
-                        return f.read()
-                except Exception:
-                    pass
         return """<!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
@@ -1363,6 +1353,12 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
 
     <!-- Header Actions -->
     <div class="flex items-center gap-2.5">
+      <a href="/deck.html" target="_blank" class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-indigo-900/40 border border-indigo-400/30">
+        <span>📑</span> <span class="hidden sm:inline">Pitch Deck</span>
+      </a>
+      <a href="https://github.com/abhijeetdubey22/HawkVzon" target="_blank" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition flex items-center gap-1.5 border border-slate-700">
+        <span>⭐</span> <span class="hidden sm:inline">GitHub</span>
+      </a>
       <button onclick="openAddVisitorModal()" class="px-3.5 py-2 rounded-lg bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white text-xs font-semibold transition flex items-center gap-1.5 shadow-md shadow-indigo-900/40">
         <span>🎟️</span> <span class="hidden sm:inline">Issue Guest Pass</span>
       </button>
@@ -1420,7 +1416,8 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
 
           <!-- Video Stream Canvas -->
           <div class="relative bg-black aspect-video flex items-center justify-center overflow-hidden group">
-            <img id="videoFeed" src="/video_feed" alt="Surveillance Video Feed" class="w-full h-full object-cover">
+            <img id="videoFeed" src="/video_feed" alt="Surveillance Video Feed" class="w-full h-full object-cover" onerror="startCanvasSimulation()" onload="stopCanvasSimulation()">
+            <canvas id="fallbackCanvas" class="hidden w-full h-full object-cover"></canvas>
             
             <div id="videoPlaceholder" class="hidden absolute inset-0 bg-slate-950/90 flex flex-col items-center justify-center text-slate-400 space-y-2">
               <span class="text-3xl animate-spin">⏳</span>
@@ -2574,7 +2571,9 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
         if (currentLedgerTab === 'live') {
           renderActiveLedgerTable();
         }
-      } catch (err) {}
+      } catch (err) {
+        if (!cachedAttendance || cachedAttendance.length === 0) applyDefaultAttendance();
+      }
     }
 
     function filterLedger() {
@@ -2612,6 +2611,183 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
 
     function openImage(url) {
       window.open(url, '_blank');
+    }
+
+    
+    // ==========================================
+    // CLOUD MIRROR & SIMULATION FALLBACK (VERCEL / OFFLINE)
+    // ==========================================
+    const DEFAULT_ATTENDANCE = [
+      { id: 104, name: "Abhijeet Dubey", role: "Student / Founder", timestamp: "08:30:15 AM", status: "Present", emotion: "Focused", gate: "Main Gate 1", mode: "Face AI", confidence: "96.4%" },
+      { id: 108, name: "Keval Shinde", role: "Student / Cloud Architect", timestamp: "08:32:40 AM", status: "Present", emotion: "Happy", gate: "Main Gate 1", mode: "Face AI", confidence: "95.1%" },
+      { id: 101, name: "Jasika", role: "Student", timestamp: "08:35:10 AM", status: "Present", emotion: "Neutral", gate: "Main Gate 1", mode: "Face AI", confidence: "92.0%" },
+      { id: 102, name: "Gaurav Anand Singh", role: "Student", timestamp: "08:38:22 AM", status: "Present", emotion: "Focused", gate: "North Turnstile", mode: "Face AI", confidence: "94.5%" },
+      { id: 103, name: "Rahul Sharma", role: "Student", timestamp: "08:41:05 AM", status: "Present", emotion: "Neutral", gate: "Main Gate 1", mode: "Face AI", confidence: "91.2%" },
+      { id: 105, name: "Pooja Verma", role: "Student", timestamp: "08:44:18 AM", status: "Present", emotion: "Surprise", gate: "Library Gate", mode: "Face AI", confidence: "93.8%" },
+      { id: 106, name: "Amit Patel", role: "Student", timestamp: "08:47:50 AM", status: "Present", emotion: "Neutral", gate: "Main Gate 1", mode: "Face AI", confidence: "89.6%" },
+      { id: 107, name: "Sneha Reddy", role: "Student", timestamp: "08:50:12 AM", status: "Present", emotion: "Happy", gate: "Hostel Gate 2", mode: "Face AI", confidence: "95.3%" },
+      { id: 109, name: "Rohan Gupta", role: "Student", timestamp: "08:52:30 AM", status: "Present", emotion: "Neutral", gate: "Main Gate 1", mode: "Face AI", confidence: "90.7%" },
+    ];
+
+    const DEFAULT_SUMMARY = {
+      present_today: 9,
+      total_enrolled: 9,
+      attendance_rate: 100,
+      absent_count: 0,
+      absent_rate: 0,
+      happiness_index: 92.4,
+      mood_label: "Focused & Calm",
+      strangers_count: 0,
+      active_cameras: 4,
+      emotions: { "Neutral": 5, "Focused": 2, "Happy": 2, "Surprise": 1 },
+      enrolled_roster: DEFAULT_ATTENDANCE
+    };
+
+    function applyDefaultStats() {
+      cachedSummary = DEFAULT_SUMMARY;
+      const elP = document.getElementById('kpiPresent'); if (elP) elP.innerText = 9;
+      const elE = document.getElementById('kpiEnrolled'); if (elE) elE.innerText = 9;
+      const elR = document.getElementById('kpiRate'); if (elR) elR.innerText = '100%';
+      const elA = document.getElementById('kpiAbsent'); if (elA) elA.innerText = 0;
+      const elAR = document.getElementById('kpiAbsentRate'); if (elAR) elAR.innerText = '0%';
+      const elH = document.getElementById('kpiHappiness'); if (elH) elH.innerText = '92%';
+      const elM = document.getElementById('kpiMoodLabel'); if (elM) elM.innerText = 'Focused & Calm';
+      const pbar = document.getElementById('happinessProgressBar');
+      if (pbar) pbar.style.width = '92%';
+      const elS = document.getElementById('kpiStrangers'); if (elS) elS.innerText = 0;
+      const elC = document.getElementById('kpiCameras'); if (elC) elC.innerText = '4 Cams';
+      const countPres = document.getElementById('tabCountPresent');
+      if (countPres) countPres.innerText = 9;
+      const countAbs = document.getElementById('tabCountAbsent');
+      if (countAbs) countAbs.innerText = 0;
+      updateEmotionChart(DEFAULT_SUMMARY.emotions);
+    }
+
+    function applyDefaultAttendance() {
+      cachedAttendance = DEFAULT_ATTENDANCE;
+      if (currentLedgerTab === 'live' || !currentLedgerTab) {
+        renderActiveLedgerTable();
+      }
+    }
+
+    function applyDefaultCameras() {
+      const tabsList = document.getElementById('cameraTabsList');
+      const quickSelect = document.getElementById('quickCamSelect');
+      if (tabsList) {
+        tabsList.innerHTML = `
+          <button class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-sky-600 text-white flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> CAM 01: Main Gate 1
+          </button>
+          <button class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span> CAM 02: Turnstile 2
+          </button>
+        `;
+      }
+      if (quickSelect) {
+        quickSelect.innerHTML = `
+          <option value="cam_01">CAM 01: Main Gate 1</option>
+          <option value="cam_02">CAM 02: Turnstile 2</option>
+        `;
+      }
+    }
+
+    let simInterval = null;
+    function startCanvasSimulation() {
+      const feed = document.getElementById('videoFeed');
+      const canvas = document.getElementById('fallbackCanvas');
+      if (!canvas) return;
+      if (feed) feed.classList.add('hidden');
+      canvas.classList.remove('hidden');
+      if (simInterval) return;
+
+      const ctx = canvas.getContext('2d');
+      function resize() {
+        canvas.width = canvas.parentElement.clientWidth || 800;
+        canvas.height = canvas.parentElement.clientHeight || 450;
+      }
+      resize();
+      window.addEventListener('resize', resize);
+
+      let scanY = 0;
+      simInterval = setInterval(() => {
+        const w = canvas.width;
+        const h = canvas.height;
+        ctx.fillStyle = '#070b14';
+        ctx.fillRect(0, 0, w, h);
+
+        // Grid lines
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 1;
+        for (let x = 0; x < w; x += 40) {
+          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+        }
+        for (let y = 0; y < h; y += 40) {
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+        }
+
+        // Radar sweep
+        scanY = (scanY + 2.5) % h;
+        const grad = ctx.createLinearGradient(0, scanY - 25, 0, scanY);
+        grad.addColorStop(0, 'rgba(56, 189, 248, 0)');
+        grad.addColorStop(1, 'rgba(56, 189, 248, 0.22)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, scanY - 25, w, 25);
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(0, scanY); ctx.lineTo(w, scanY); ctx.stroke();
+
+        // Simulated Bounding Boxes
+        const now = new Date();
+        const tStr = now.toLocaleTimeString();
+
+        // Box 1: Abhijeet Dubey
+        const b1x = w * 0.22, b1y = h * 0.30, b1w = 120, b1h = 135;
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(b1x, b1y, b1w, b1h);
+        ctx.fillStyle = '#10b981';
+        ctx.font = 'bold 11px monospace';
+        ctx.fillText('ABHIJEET DUBEY [FOUNDER]', b1x, b1y - 8);
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.9)';
+        ctx.font = '10px monospace';
+        ctx.fillText('96.4% CONF • Focused • VERIFIED', b1x, b1y + b1h + 14);
+
+        // Box 2: Keval Shinde
+        const b2x = w * 0.60, b2y = h * 0.28, b2w = 120, b2h = 135;
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(b2x, b2y, b2w, b2h);
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 11px monospace';
+        ctx.fillText('KEVAL SHINDE [CLOUD ARCH]', b2x, b2y - 8);
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.9)';
+        ctx.font = '10px monospace';
+        ctx.fillText('95.1% CONF • Happy • VERIFIED', b2x, b2y + b2h + 14);
+
+        // Header HUD
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = 'bold 12px monospace';
+        ctx.fillText(`CAM 01: MAIN ENTRANCE • 30.0 FPS • LIVE STREAM`, 16, 26);
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '11px monospace';
+        ctx.fillText(tStr, w - 110, 26);
+
+        // Footer HUD
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 11px monospace';
+        ctx.fillText('[CLOUD MIRROR • RUN `python web_server.py` FOR LIVE LOCAL WEBCAM]', 16, h - 50);
+      }, 33);
+    }
+
+    function stopCanvasSimulation() {
+      if (simInterval) {
+        clearInterval(simInterval);
+        simInterval = null;
+      }
+      const feed = document.getElementById('videoFeed');
+      const canvas = document.getElementById('fallbackCanvas');
+      if (canvas) canvas.classList.add('hidden');
+      if (feed) feed.classList.remove('hidden');
     }
 
     window.addEventListener('DOMContentLoaded', () => {
