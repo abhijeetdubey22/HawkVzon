@@ -65,6 +65,9 @@
 
     <!-- Header Actions -->
     <div class="flex items-center gap-2.5">
+      <button onclick="openStrategyModal()" class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-600 to-rose-600 hover:from-amber-500 hover:to-rose-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-amber-900/40 border border-amber-400/30">
+        <span>💡</span> <span class="hidden sm:inline">Strategy & Unit Economics</span>
+      </button>
       <button onclick="openAddVisitorModal()" class="px-3.5 py-2 rounded-lg bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white text-xs font-semibold transition flex items-center gap-1.5 shadow-md shadow-indigo-900/40">
         <span>🎟️</span> <span class="hidden sm:inline">Issue Guest Pass</span>
       </button>
@@ -1342,20 +1345,19 @@
       });
     }
 
+    function openStrategyModal() {
+      const m = document.getElementById('strategyModal');
+      if (m) m.classList.remove('hidden');
+    }
+
+    function closeStrategyModal() {
+      const m = document.getElementById('strategyModal');
+      if (m) m.classList.add('hidden');
+    }
+
     async function exportReport() {
-      try {
-        showToast("Generating Executive HTML report...", "info");
-        const res = await fetch('/api/export_report');
-        const data = await res.json();
-        if (data.success && data.url) {
-          showToast("Report exported successfully!", "success");
-          window.open(data.url, '_blank');
-        } else {
-          showToast("Report error: " + (data.error || "Unknown"), "error");
-        }
-      } catch (err) {
-        showToast("Report request failed", "error");
-      }
+      openStrategyModal();
+      showToast("Opening HawkVzon Strategic Thesis & Unit Economics...", "info");
     }
 
     function toggleFullscreen() {
@@ -1444,6 +1446,146 @@
       pollAttendance();
     });
   </script>
+  <!-- STRATEGY & UNIT ECONOMICS MODAL (THE V7.0 BLUEPRINT) -->
+  <div id="strategyModal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md hidden flex items-center justify-center p-3 md:p-6 overflow-y-auto">
+    <div class="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+      <!-- Modal Header -->
+      <div class="bg-slate-950 px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-xl shadow-lg shadow-amber-500/20">
+            💼
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-base md:text-lg font-bold text-white">HawkVzon Strategy & Market Deconstruction</h2>
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-400 border border-amber-800/60 font-mono">V7.0 BLUEPRINT</span>
+            </div>
+            <p class="text-xs text-slate-400">Institutional Market Reality, Competitor Defense, Meta WhatsApp Math & Unit Economics</p>
+          </div>
+        </div>
+        <button onclick="closeStrategyModal()" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition">
+          ✕
+        </button>
+      </div>
+
+      <!-- Modal Content (Scrollable) -->
+      <div class="p-6 overflow-y-auto space-y-6 text-xs text-slate-300">
+
+        <!-- Phase 1 -->
+        <div class="glass p-4 rounded-xl border border-slate-800 space-y-2">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+            <h3 class="font-bold text-amber-400 text-sm flex items-center gap-2">
+              <span>⚡</span> Phase 1: The Brutal Deconstruction
+            </h3>
+            <span class="text-[10px] font-mono text-slate-400">Product Essence</span>
+          </div>
+          <p><strong class="text-white">The Naked Truth:</strong> HawkVzon is a cloud webhook & ADMS terminal processor receiving direct HTTP push events from existing eSSL and Matrix biometric devices in boarding schools and coaching hostels to trigger rate-limited parent WhatsApp alerts, digital out-passes, and automated rent reminders.</p>
+          <p><strong class="text-white">The Real Friction & Solution:</strong> Defeats Indian hostel software competitors (RentOk, Hostel Mitra charging ₹99/mo to ₹20/bed/mo) by bundling direct hardware integration, parent-approved out-passes, and rent tracking so hostels happily pay ₹30/bed/month (₹43,200/year).</p>
+        </div>
+
+        <!-- Phase 2 -->
+        <div class="glass p-4 rounded-xl border border-slate-800 space-y-2">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+            <h3 class="font-bold text-sky-400 text-sm flex items-center gap-2">
+              <span>🎯</span> Phase 2: India Market & Bloodbath Analysis
+            </h3>
+            <span class="text-[10px] font-mono text-slate-400">TAM: ₹34.56 Cr / Year</span>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 my-2">
+            <div class="bg-slate-950/80 p-3 rounded-lg border border-slate-800">
+              <span class="text-[10px] text-slate-400 uppercase">Target Universe</span>
+              <p class="text-sm font-bold text-white mt-0.5">8,000 Facilities</p>
+              <span class="text-[10px] text-slate-500">3,500 Boarding + 4,500 Coaching Hostels</span>
+            </div>
+            <div class="bg-slate-950/80 p-3 rounded-lg border border-slate-800">
+              <span class="text-[10px] text-slate-400 uppercase">Average Ticket</span>
+              <p class="text-sm font-bold text-sky-400 mt-0.5">₹43,200 / Year</p>
+              <span class="text-[10px] text-slate-500">120 Beds @ ₹30 / bed / month</span>
+            </div>
+            <div class="bg-slate-950/80 p-3 rounded-lg border border-slate-800">
+              <span class="text-[10px] text-slate-400 uppercase">Indian Hostel TAM</span>
+              <p class="text-sm font-bold text-emerald-400 mt-0.5">₹34.56 Crores</p>
+              <span class="text-[10px] text-slate-500">8,000 × ₹43,200 annual recurring</span>
+            </div>
+          </div>
+          <p><strong class="text-white">Incumbents & Graveyard:</strong> Generic PG software (RentOk, FretBox) lack hardware ADMS push. Old local Windows PC connectors died because reception PCs crashed. HawkVzon's direct terminal cloud-push eliminates the local PC entirely.</p>
+        </div>
+
+        <!-- Phase 3 -->
+        <div class="glass p-4 rounded-xl border border-slate-800 space-y-2">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+            <h3 class="font-bold text-purple-400 text-sm flex items-center gap-2">
+              <span>🌐</span> Phase 3: Global Context & Winners
+            </h3>
+            <span class="text-[10px] font-mono text-slate-400">Benchmarking</span>
+          </div>
+          <p><strong class="text-white">Global Parallels:</strong> <span class="text-sky-300 font-semibold">Orah</span> (NZ/US) and <span class="text-sky-300 font-semibold">REACH Boarding</span> (Australia) charge $5,000+/year for student pastoral care in Western boarding schools.</p>
+          <p><strong class="text-white">Adaptation Risk:</strong> Indian hostel operators scrutinize costs against ₹99/mo tools, making bundled rent reminders and digital out-passes mandatory to justify ₹3,600/month.</p>
+        </div>
+
+        <!-- Phase 4 -->
+        <div class="glass p-4 rounded-xl border border-slate-800 space-y-2">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+            <h3 class="font-bold text-emerald-400 text-sm flex items-center gap-2">
+              <span>💰</span> Phase 4: Unit Economics & Capital Math
+            </h3>
+            <span class="text-[10px] font-mono text-emerald-400 font-bold">7.6:1 LTV:CAC &bull; 88.5% Margin</span>
+          </div>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5 my-2">
+            <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-center">
+              <span class="text-[10px] text-slate-400">Annual License</span>
+              <p class="font-mono font-bold text-white text-xs mt-0.5">₹43,200</p>
+            </div>
+            <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-center">
+              <span class="text-[10px] text-slate-400">Meta Msg Cost</span>
+              <p class="font-mono font-bold text-emerald-400 text-xs mt-0.5">₹0.1150 / msg</p>
+            </div>
+            <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-center">
+              <span class="text-[10px] text-slate-400">Annual Meta Spend</span>
+              <p class="font-mono font-bold text-amber-400 text-xs mt-0.5">₹4,968 / yr</p>
+            </div>
+            <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-center">
+              <span class="text-[10px] text-slate-400">Customer CAC</span>
+              <p class="font-mono font-bold text-rose-400 text-xs mt-0.5">₹15,000</p>
+            </div>
+          </div>
+          <p><strong class="text-white">Strict Rate-Limiting:</strong> 1-alert-per-day "Safe Evening Return" cap + 6-hour punch cooldown restricts a 120-bed facility to 3,600 msgs/month (₹414/mo in Meta fees), achieving <strong>₹1,14,696 3-year LTV</strong> and <strong>7.6:1 LTV:CAC</strong>.</p>
+        </div>
+
+        <!-- Phase 5 & 6 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="glass p-4 rounded-xl border border-slate-800 space-y-2">
+            <h3 class="font-bold text-rose-400 text-sm flex items-center gap-2">
+              <span>🛡️</span> Phase 5: AI Threat & Sentiment
+            </h3>
+            <p><strong class="text-white">AI Moat:</strong> While code is trivial, owning the hardware ADMS terminal fleet protocol, parent-approved out-passes, and UPI fee tracking cannot be replaced by AI wrappers.</p>
+            <p><strong class="text-white">Street Validation:</strong> Intense discussions on <span class="font-mono text-slate-200">r/JEENEETards</span> & <span class="font-mono text-slate-200">r/indianmedschool</span> validate acute parent anxiety regarding Kota and Sikar student curfew enforcement.</p>
+          </div>
+
+          <div class="glass p-4 rounded-xl border border-slate-800 space-y-2">
+            <h3 class="font-bold text-cyan-400 text-sm flex items-center gap-2">
+              <span>🚀</span> Phase 6: Execution & Milestones
+            </h3>
+            <p><strong class="text-white">Breakeven:</strong> Cash-flow positive in <strong class="text-emerald-400">6 months</strong> on just 25 onboarding hostels.</p>
+            <p><strong class="text-white">Target Scale:</strong> 1,500 coaching hostels and boarding schools captures 18.7% market share, generating a <strong class="text-white font-mono">₹6.5 Crore ARR</strong> bootstrapped cash-flow powerhouse.</p>
+          </div>
+        </div>
+
+        <!-- Phase 7 -->
+        <div class="bg-gradient-to-r from-emerald-950/80 to-slate-900 p-4 rounded-xl border border-emerald-800/60 flex items-center justify-between gap-4">
+          <div>
+            <span class="text-[10px] font-mono font-bold text-emerald-400 uppercase tracking-widest">Phase 7: The Final Verdict</span>
+            <h4 class="text-sm font-bold text-white mt-0.5">GO: Highly Profitable ₹3 Cr to ₹6.5 Cr ARR Bootstrapped Machine</h4>
+            <p class="text-[11px] text-slate-300 mt-1">Direct ADMS push + 1-ping/day Meta cap + parent out-pass workflow guarantees 88% gross margins and zero local hardware headaches.</p>
+          </div>
+          <button onclick="closeStrategyModal()" class="shrink-0 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition shadow-lg shadow-emerald-900/50">
+            Acknowledge & Close
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
 </body>
 </html>
         
