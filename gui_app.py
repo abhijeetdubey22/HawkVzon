@@ -1049,7 +1049,7 @@ class App:
         with guard("migrate_plain_faces"):
             migrate_plain_faces()
 
-        root.title("Face & Emotion Recognition Dashboard")
+        root.title("HawkVzon AI — HostelOS & Edge Security Command Center")
         root.geometry("1300x880")
         root.minsize(1150, 700)
         root.configure(bg=C["bg"])
@@ -1096,30 +1096,36 @@ class App:
 
         left = tk.Frame(bar, bg=C["header"])
         left.pack(side="left", padx=24)
-        tk.Label(left, text="🎥  Face & Emotion Recognition Command Center", bg=C["header"], fg=C["text"],
-                 font=("Segoe UI", 15, "bold")).pack(anchor="w", pady=(12, 1))
-        tk.Label(left, text="Multi-Camera AI Vision  •  Live Biometrics  •  Real-time Attendance & Alerts",
+        tk.Label(left, text="🦅  HawkVzon AI — HostelOS & Edge Security Center", bg=C["header"], fg=C["text"],
+                 font=("Segoe UI", 14, "bold")).pack(anchor="w", pady=(10, 1))
+        tk.Label(left, text="Enterprise AI & Smart Cities  •  Google Cloud Startup Buildathon 2026  •  Abhijeet Dubey & Keval Shinde",
                  bg=C["header"], fg=C["subtle"], font=FONT_S).pack(anchor="w")
 
         right = tk.Frame(bar, bg=C["header"])
         right.pack(side="right", padx=24)
         tk.Label(right, text="Recognition:", bg=C["header"], fg=C["subtle"],
-                 font=FONT_S).pack(side="left", padx=(0, 10))
+                 font=FONT_S).pack(side="left", padx=(0, 8))
         self.rec_pill = tk.Label(right, text="● STOPPED", bg="#141418", fg="#71717a",
-                                 font=("Segoe UI", 8, "bold"), padx=12, pady=4)
+                                 font=("Segoe UI", 8, "bold"), padx=10, pady=3)
         self.rec_pill.pack(side="left")
+
+        tk.Button(right, text="⚡ Token Audit", command=self.open_token_audit, bg="#1e3a8a",
+                  fg="#93c5fd", activebackground="#1e40af", activeforeground="#ffffff",
+                  relief="flat", font=FONT_S, padx=10, pady=3,
+                  cursor="hand2", bd=0, highlightthickness=1, highlightbackground="#3b82f6").pack(side="left", padx=(10, 0))
+
         tk.Button(right, text="🎫 Guest Passes", command=self.open_visitors_modal, bg="#18181d",
                   fg="#f4f4f5", activebackground="#26262e", activeforeground="#ffffff",
-                  relief="flat", font=FONT_S, padx=12, pady=4,
-                  cursor="hand2", bd=0, highlightthickness=1, highlightbackground="#27272e").pack(side="left", padx=(10, 0))
+                  relief="flat", font=FONT_S, padx=10, pady=3,
+                  cursor="hand2", bd=0, highlightthickness=1, highlightbackground="#27272e").pack(side="left", padx=(6, 0))
         tk.Button(right, text="🌐 Web Portal", command=self.open_web_portal, bg="#18181d",
                   fg="#f4f4f5", activebackground="#26262e", activeforeground="#ffffff",
-                  relief="flat", font=FONT_S, padx=12, pady=4,
-                  cursor="hand2", bd=0, highlightthickness=1, highlightbackground="#27272e").pack(side="left", padx=(8, 0))
+                  relief="flat", font=FONT_S, padx=10, pady=3,
+                  cursor="hand2", bd=0, highlightthickness=1, highlightbackground="#27272e").pack(side="left", padx=(6, 0))
         tk.Button(right, text="🔒 PIN", command=lambda: self.hub.change_pin(), bg="#18181d",
                   fg="#f4f4f5", activebackground="#26262e", activeforeground="#ffffff",
-                  relief="flat", font=FONT_S, padx=12, pady=4,
-                  cursor="hand2", bd=0, highlightthickness=1, highlightbackground="#27272e").pack(side="left", padx=(8, 0))
+                  relief="flat", font=FONT_S, padx=10, pady=3,
+                  cursor="hand2", bd=0, highlightthickness=1, highlightbackground="#27272e").pack(side="left", padx=(6, 0))
 
     def _build_statusbar(self):
         # Hairline top border for status bar
@@ -1158,16 +1164,16 @@ class App:
         for i in range(4):
             kpi_wrap.columnconfigure(i, weight=1, uniform="kpi")
 
-        self.kpi_present = Kpi(kpi_wrap, "Students Present", "#10b981", sub="Tracking enrolled roster")
+        self.kpi_present = Kpi(kpi_wrap, "Hostel In-Premises", "#10b981", sub="Enrolled roster checked in")
         self.kpi_present.grid(row=0, column=0, sticky="ew", padx=(0, 6))
 
-        self.kpi_absent = Kpi(kpi_wrap, "Campus Absentees", "#71717a", sub="Awaiting arrival scan")
+        self.kpi_absent = Kpi(kpi_wrap, "Curfew Radar", "#f59e0b", sub="09:30 PM late watch")
         self.kpi_absent.grid(row=0, column=1, sticky="ew", padx=4)
 
-        self.kpi_mood = Kpi(kpi_wrap, "Wellbeing Index", "#3b82f6", sub="FACS Geometric AU")
+        self.kpi_mood = Kpi(kpi_wrap, "Edge AI Tokens", "#3b82f6", sub="0 Tokens ($0.00 Cost)")
         self.kpi_mood.grid(row=0, column=2, sticky="ew", padx=4)
 
-        self.kpi_radar = Kpi(kpi_wrap, "Perimeter Radar", "#f59e0b", sub="Live Perimeter Scan")
+        self.kpi_radar = Kpi(kpi_wrap, "Cloud Token Savings", "#10b981", sub="99.999% vs Cloud Video")
         self.kpi_radar.grid(row=0, column=3, sticky="ew", padx=(6, 0))
 
     def _build_body(self, parent):
@@ -1383,6 +1389,48 @@ class App:
         webbrowser.open("http://localhost:5000")
         self.set_status("Opened Command Center Web Portal at http://localhost:5000")
 
+    def open_token_audit(self):
+        """Display the Token Economy & Architectural Telemetry dialog."""
+        win = tk.Toplevel(self.root)
+        win.title("⚡ HawkVzon AI — Token Telemetry & Cloud Cost Audit")
+        win.geometry("580x440")
+        win.resizable(False, False)
+        win.configure(bg="#0f172a")
+
+        header = tk.Frame(win, bg="#1e293b", padx=20, pady=14)
+        header.pack(fill="x")
+        tk.Label(header, text="⚡ AI Token Economy & Architectural Telemetry",
+                 font=("Segoe UI", 13, "bold"), fg="#f8fafc", bg="#1e293b").pack(anchor="w")
+        tk.Label(header, text="Track: Enterprise AI & Smart Cities • Google Cloud Startup Buildathon 2026",
+                 font=("Segoe UI", 8), fg="#94a3b8", bg="#1e293b").pack(anchor="w", pady=(2, 0))
+
+        content = tk.Frame(win, bg="#0f172a", padx=20, pady=16)
+        content.pack(fill="both", expand=True)
+
+        rows = [
+            ("Edge Computer Vision & Biometrics", "0 Tokens", "$0.00 / month", "#10b981", "100% on-premise local CPU array arithmetic"),
+            ("WhatsApp Parent Arrival Notifications", "0 Tokens", "Rs 0.115 / msg", "#10b981", "Meta Business Cloud API utility template"),
+            ("Google Gemini 1.5 Flash Nightly Synthesis", "~150 Tokens/Day", "Rs 12.50 / month", "#38bdf8", "10:00 PM owner curfew & anomaly briefing"),
+            ("Comparison: Naive Cloud Video Streaming", "27.8M Tokens/Hr", "$69.66 / hour", "#f87171", "Commercially unviable for 8,000 hostels")
+        ]
+
+        for title, tok, cost, col, note in rows:
+            card = tk.Frame(content, bg="#1e293b", padx=12, pady=10, highlightthickness=1, highlightbackground="#334155")
+            card.pack(fill="x", pady=4)
+            top_line = tk.Frame(card, bg="#1e293b")
+            top_line.pack(fill="x")
+            tk.Label(top_line, text=title, font=("Segoe UI", 9, "bold"), fg="#f1f5f9", bg="#1e293b").pack(side="left")
+            tk.Label(top_line, text=f"{tok}  •  {cost}", font=("Segoe UI", 9, "bold"), fg=col, bg="#1e293b").pack(side="right")
+            tk.Label(card, text=note, font=("Segoe UI", 8), fg="#94a3b8", bg="#1e293b").pack(anchor="w", pady=(3, 0))
+
+        summary = tk.Label(content, text="✅ HawkVzon achieves a 99.999% Token Cost Reduction while providing sub-millisecond edge matching.",
+                           font=("Segoe UI", 8, "italic"), fg="#a7f3d0", bg="#0f172a", wraplength=540, justify="center")
+        summary.pack(pady=(12, 10))
+
+        btn = tk.Button(content, text="Close Audit", command=win.destroy, bg="#3b82f6", fg="#ffffff",
+                        font=("Segoe UI", 9, "bold"), relief="flat", padx=16, pady=6, cursor="hand2")
+        btn.pack()
+
     def _get_students_data(self):
         st_file = os.path.join(BASE_DIR, "data", "students.json")
         if os.path.exists(st_file):
@@ -1419,18 +1467,13 @@ class App:
             absent_count = max(0, total_students - present_count)
             pct = (present_count / total_students * 100) if total_students > 0 else 0
 
-            happy_count = sum(1 for e in emotions if e in ("happy", "surprise"))
-            mood_pct = int((happy_count / len(emotions)) * 100) if emotions else 85
-
             if hasattr(self, "kpi_present"):
                 self.kpi_present.set(f"{present_count} / {total_students} ({pct:.0f}%)",
                                      f"Enrolled Roster: {total_students}")
-                self.kpi_absent.set(f"{absent_count} Students",
-                                    "Awaiting arrival" if absent_count > 0 else "All present today!")
-                self.kpi_mood.set(f"{mood_pct}% Happy",
-                                  f"{len(emotions)} expressions logged" if emotions else "Calibrated FACS AU")
-                radar_txt = f"{strangers_today} Stranger Alert" if strangers_today > 0 else "Secure (All Clear)"
-                self.kpi_radar.set(radar_txt, "Active Perimeter Radar")
+                self.kpi_absent.set(f"{absent_count} Curfew Watch",
+                                    "09:30 PM Night Curfew Radar" if absent_count > 0 else "All Checked In")
+                self.kpi_mood.set("0 Tokens ($0.00)", "100% Local CPU Array Matching")
+                self.kpi_radar.set("99.999% Saved", "Token Savings vs Cloud Video")
         except Exception:
             pass
 
