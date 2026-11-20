@@ -127,7 +127,7 @@
             </div>
             <div class="flex items-center gap-3 text-xs text-slate-400 font-mono">
               <span>FPS: <strong class="text-emerald-400" id="statFps">30.0</strong></span>
-              <span>Faces: <strong class="text-sky-400" id="statFaces">1</strong></span>
+              <span>Faces: <strong class="text-sky-400" id="statFaces">0</strong></span>
               <span>Zoom: <strong class="text-amber-400" id="statZoom">1.0x</strong></span>
             </div>
           </div>
@@ -149,14 +149,18 @@
               </button>
             </div>
 
-            <!-- Face Recognition Reticle Overlay -->
-            <div id="hudReticle" class="absolute top-[26%] left-[25%] w-[160px] h-[180px] border-2 border-emerald-400/90 rounded-xl pointer-events-none flex flex-col justify-between p-2 shadow-[0_0_20px_rgba(16,185,129,0.25)]">
-              <div class="bg-emerald-950/90 text-emerald-400 font-mono text-[10px] font-bold px-2 py-0.5 rounded border border-emerald-700/60 self-start">
-                ABHIJEET DUBEY [FOUNDER]
+            <!-- Professional Optical Scanner Guide -->
+            <div id="hudReticle" class="absolute inset-[14%] border border-dashed border-sky-400/30 rounded-2xl pointer-events-none flex flex-col justify-between p-3.5">
+              <div class="flex justify-between items-start">
+                <div class="w-5 h-5 border-t-2 border-l-2 border-sky-400 rounded-tl-sm"></div>
+                <div class="w-5 h-5 border-t-2 border-r-2 border-sky-400 rounded-tr-sm"></div>
               </div>
-              <div class="bg-slate-950/90 text-emerald-300 font-mono text-[9px] px-1.5 py-0.5 rounded self-start flex items-center gap-1">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span>96.4% CONF &bull; Focused</span>
+              <div class="text-center font-mono text-[10px] text-sky-400/80 tracking-widest uppercase">
+                [ ALIGN FACE WITHIN RECOGNITION ZONE ]
+              </div>
+              <div class="flex justify-between items-end">
+                <div class="w-5 h-5 border-b-2 border-l-2 border-sky-400 rounded-bl-sm"></div>
+                <div class="w-5 h-5 border-b-2 border-r-2 border-sky-400 rounded-br-sm"></div>
               </div>
             </div>
 
@@ -247,10 +251,10 @@
                   🔴 Live Stream Scans
                 </button>
                 <button id="tabPresentBtn" onclick="setLedgerTab('present')" class="px-3 py-1 rounded-lg text-slate-400 hover:text-white font-semibold transition">
-                  ✅ Present (<span id="tabCountPresent">9</span>)
+                  ✅ Present (<span id="tabCountPresent">0</span>)
                 </button>
                 <button id="tabAbsentBtn" onclick="setLedgerTab('absent')" class="px-3 py-1 rounded-lg text-slate-400 hover:text-white font-semibold transition">
-                  ❌ Absent (<span id="tabCountAbsent">0</span>)
+                  ❌ Absent (<span id="tabCountAbsent">9</span>)
                 </button>
                 <button id="tabVisitorBtn" onclick="setLedgerTab('visitors')" class="px-3 py-1 rounded-lg text-slate-400 hover:text-white font-semibold transition flex items-center gap-1">
                   <span>🎟️</span> <span>Guests</span> (<span id="tabCountVisitors">1</span>)
@@ -270,95 +274,14 @@
                 <!-- Injected dynamically by active tab -->
               </thead>
               <tbody id="ledgerBody" class="divide-y divide-slate-800/60 text-slate-300">
-                <tr class="hover:bg-slate-900/50 transition">
-                  <td class="p-3 font-mono font-semibold text-slate-400">104</td>
-                  <td class="p-3 font-bold text-white flex items-center gap-2"><span>👤</span> Abhijeet Dubey</td>
-                  <td class="p-3 text-slate-400">Student / Founder</td>
-                  <td class="p-3 font-mono text-slate-300">08:30:15 AM</td>
-                  <td class="p-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800/60">Present</span></td>
-                  <td class="p-3"><span class="text-sky-400 font-medium">Focused</span></td>
-                  <td class="p-3 text-slate-400">Main Gate 1</td>
-                  <td class="p-3 font-mono text-emerald-400 font-semibold">96.4%</td>
-                </tr>
-                <tr class="hover:bg-slate-900/50 transition">
-                  <td class="p-3 font-mono font-semibold text-slate-400">108</td>
-                  <td class="p-3 font-bold text-white flex items-center gap-2"><span>👤</span> Keval Shinde</td>
-                  <td class="p-3 text-slate-400">Student / Cloud Architect</td>
-                  <td class="p-3 font-mono text-slate-300">08:32:40 AM</td>
-                  <td class="p-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800/60">Present</span></td>
-                  <td class="p-3"><span class="text-emerald-400 font-medium">Happy</span></td>
-                  <td class="p-3 text-slate-400">Main Gate 1</td>
-                  <td class="p-3 font-mono text-emerald-400 font-semibold">95.1%</td>
-                </tr>
-                <tr class="hover:bg-slate-900/50 transition">
-                  <td class="p-3 font-mono font-semibold text-slate-400">101</td>
-                  <td class="p-3 font-bold text-white flex items-center gap-2"><span>👤</span> Jasika</td>
-                  <td class="p-3 text-slate-400">Student</td>
-                  <td class="p-3 font-mono text-slate-300">08:35:10 AM</td>
-                  <td class="p-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800/60">Present</span></td>
-                  <td class="p-3"><span class="text-slate-300 font-medium">Neutral</span></td>
-                  <td class="p-3 text-slate-400">Main Gate 1</td>
-                  <td class="p-3 font-mono text-emerald-400 font-semibold">92.0%</td>
-                </tr>
-                <tr class="hover:bg-slate-900/50 transition">
-                  <td class="p-3 font-mono font-semibold text-slate-400">102</td>
-                  <td class="p-3 font-bold text-white flex items-center gap-2"><span>👤</span> Gaurav Anand Singh</td>
-                  <td class="p-3 text-slate-400">Student</td>
-                  <td class="p-3 font-mono text-slate-300">08:38:22 AM</td>
-                  <td class="p-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800/60">Present</span></td>
-                  <td class="p-3"><span class="text-sky-400 font-medium">Focused</span></td>
-                  <td class="p-3 text-slate-400">North Turnstile</td>
-                  <td class="p-3 font-mono text-emerald-400 font-semibold">94.5%</td>
-                </tr>
-                <tr class="hover:bg-slate-900/50 transition">
-                  <td class="p-3 font-mono font-semibold text-slate-400">103</td>
-                  <td class="p-3 font-bold text-white flex items-center gap-2"><span>👤</span> Rahul Sharma</td>
-                  <td class="p-3 text-slate-400">Student</td>
-                  <td class="p-3 font-mono text-slate-300">08:41:05 AM</td>
-                  <td class="p-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800/60">Present</span></td>
-                  <td class="p-3"><span class="text-slate-300 font-medium">Neutral</span></td>
-                  <td class="p-3 text-slate-400">Main Gate 1</td>
-                  <td class="p-3 font-mono text-emerald-400 font-semibold">91.2%</td>
-                </tr>
-                <tr class="hover:bg-slate-900/50 transition">
-                  <td class="p-3 font-mono font-semibold text-slate-400">105</td>
-                  <td class="p-3 font-bold text-white flex items-center gap-2"><span>👤</span> Pooja Verma</td>
-                  <td class="p-3 text-slate-400">Student</td>
-                  <td class="p-3 font-mono text-slate-300">08:44:18 AM</td>
-                  <td class="p-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800/60">Present</span></td>
-                  <td class="p-3"><span class="text-purple-400 font-medium">Surprise</span></td>
-                  <td class="p-3 text-slate-400">Library Gate</td>
-                  <td class="p-3 font-mono text-emerald-400 font-semibold">93.8%</td>
-                </tr>
-                <tr class="hover:bg-slate-900/50 transition">
-                  <td class="p-3 font-mono font-semibold text-slate-400">106</td>
-                  <td class="p-3 font-bold text-white flex items-center gap-2"><span>👤</span> Amit Patel</td>
-                  <td class="p-3 text-slate-400">Student</td>
-                  <td class="p-3 font-mono text-slate-300">08:47:50 AM</td>
-                  <td class="p-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800/60">Present</span></td>
-                  <td class="p-3"><span class="text-slate-300 font-medium">Neutral</span></td>
-                  <td class="p-3 text-slate-400">Main Gate 1</td>
-                  <td class="p-3 font-mono text-emerald-400 font-semibold">89.6%</td>
-                </tr>
-                <tr class="hover:bg-slate-900/50 transition">
-                  <td class="p-3 font-mono font-semibold text-slate-400">107</td>
-                  <td class="p-3 font-bold text-white flex items-center gap-2"><span>👤</span> Sneha Reddy</td>
-                  <td class="p-3 text-slate-400">Student</td>
-                  <td class="p-3 font-mono text-slate-300">08:50:12 AM</td>
-                  <td class="p-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800/60">Present</span></td>
-                  <td class="p-3"><span class="text-emerald-400 font-medium">Happy</span></td>
-                  <td class="p-3 text-slate-400">Hostel Gate 2</td>
-                  <td class="p-3 font-mono text-emerald-400 font-semibold">95.3%</td>
-                </tr>
-                <tr class="hover:bg-slate-900/50 transition">
-                  <td class="p-3 font-mono font-semibold text-slate-400">109</td>
-                  <td class="p-3 font-bold text-white flex items-center gap-2"><span>👤</span> Rohan Gupta</td>
-                  <td class="p-3 text-slate-400">Student</td>
-                  <td class="p-3 font-mono text-slate-300">08:52:30 AM</td>
-                  <td class="p-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800/60">Present</span></td>
-                  <td class="p-3"><span class="text-slate-300 font-medium">Neutral</span></td>
-                  <td class="p-3 text-slate-400">Main Gate 1</td>
-                  <td class="p-3 font-mono text-emerald-400 font-semibold">90.7%</td>
+                <tr>
+                  <td colspan="8" class="py-12 text-center">
+                    <div class="flex flex-col items-center justify-center gap-2 text-slate-400">
+                      <span class="w-3 h-3 rounded-full bg-emerald-400 animate-pulse"></span>
+                      <span class="font-semibold text-xs text-slate-200">Live AI Biometric Scanner Ready</span>
+                      <span class="text-[11px] text-slate-500">Real-time attendance logs will stream here as identities are recognized</span>
+                    </div>
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -378,7 +301,7 @@
               <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 font-bold" id="kpiRate">0%</span>
             </div>
             <div class="text-2xl md:text-3xl font-extrabold text-emerald-400 mt-1">
-              <span id="kpiPresent">9</span> <span class="text-xs text-slate-400 font-normal">/ <span id="kpiEnrolled">9</span></span>
+              <span id="kpiPresent">0</span> <span class="text-xs text-slate-400 font-normal">/ <span id="kpiEnrolled">9</span></span>
             </div>
             <div class="text-[10px] text-emerald-500/90 mt-1">Verified identities in class</div>
           </div>
@@ -389,7 +312,7 @@
               <span class="text-[10px] px-1.5 py-0.5 rounded bg-rose-950 text-rose-400 font-bold" id="kpiAbsentRate">0%</span>
             </div>
             <div class="text-2xl md:text-3xl font-extrabold text-rose-400 mt-1">
-              <span id="kpiAbsent">0</span> <span class="text-xs text-slate-400 font-normal">Pending</span>
+              <span id="kpiAbsent">9</span> <span class="text-xs text-slate-400 font-normal">Pending</span>
             </div>
             <div class="text-[10px] text-slate-400 mt-1">Awaiting gate scan today</div>
           </div>
@@ -400,10 +323,10 @@
               <span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-950 text-sky-400 font-bold" id="kpiMoodLabel">Optimal</span>
             </div>
             <div class="text-2xl md:text-3xl font-extrabold text-sky-400 mt-1">
-              <span id="kpiHappiness">85%</span> <span class="text-xs text-slate-400 font-normal">Score</span>
+              <span id="kpiHappiness">--</span> <span class="text-xs text-slate-400 font-normal">Score</span>
             </div>
             <div class="w-full bg-slate-800 rounded-full h-1.5 mt-2 overflow-hidden">
-              <div id="happinessProgressBar" class="bg-gradient-to-r from-sky-400 to-emerald-400 h-1.5 rounded-full" style="width: 85%"></div>
+              <div id="happinessProgressBar" class="bg-gradient-to-r from-sky-400 to-emerald-400 h-1.5 rounded-full" style="width: 0%"></div>
             </div>
           </div>
 
