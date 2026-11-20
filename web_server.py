@@ -1286,6 +1286,13 @@ class CommandCenterHandler(BaseHTTPRequestHandler):
         return self.get_principal_summary()
 
     def render_dashboard(self):
+        index_file = os.path.join(BASE_DIR, "index.html")
+        if os.path.exists(index_file):
+            try:
+                with open(index_file, "r", encoding="utf-8") as f:
+                    return f.read()
+            except Exception:
+                pass
         return """<!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
