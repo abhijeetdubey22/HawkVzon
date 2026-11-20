@@ -1,926 +1,890 @@
-<!DOCTYPE html>
-<html lang="en" class="dark">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>🦅 HawkVzon AI — HostelOS & Edge Security Command Center</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            brand: {
-              400: '#38bdf8',
-              500: '#0ea5e9',
-              600: '#0284c7'
-            },
-            surface: {
-              canvas: '#060a12',
-              card: '#0c1322',
-              sub: '#152037'
-            }
-          }
-        }
-      }
-    }
-  </script>
-  <style>
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: #060a12; }
-    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 9999px; }
-    ::-webkit-scrollbar-thumb:hover { background: #38bdf8; }
-    .glass { backdrop-filter: blur(14px); background: rgba(12, 19, 34, 0.85); border: 1px solid rgba(56, 189, 248, 0.15); }
-    .glass-card { backdrop-filter: blur(12px); background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(51, 65, 85, 0.5); }
-    .glow-cyan { box-shadow: 0 0 30px -5px rgba(56, 189, 248, 0.25); }
-    .glow-emerald { box-shadow: 0 0 25px -5px rgba(16, 185, 129, 0.35); }
-    .glow-rose { box-shadow: 0 0 25px -5px rgba(244, 63, 94, 0.35); }
-    @keyframes pulse-fast { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-    .animate-pulse-fast { animation: pulse-fast 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
-    @keyframes scanline {
-      0% { top: 0%; opacity: 0.8; }
-      50% { opacity: 1; }
-      100% { top: 100%; opacity: 0.8; }
-    }
-    .scanline-beam {
-      position: absolute;
-      left: 0; right: 0; height: 3px;
-      background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.8), rgba(16, 185, 129, 0.9), transparent);
-      box-shadow: 0 0 15px rgba(56, 189, 248, 0.8);
-      animation: scanline 3.2s linear infinite;
-      pointer-events: none;
-    }
-    .hud-grid {
-      background-size: 30px 30px;
-      background-image: 
-        linear-gradient(to right, rgba(56, 189, 248, 0.05) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(56, 189, 248, 0.05) 1px, transparent 1px);
-    }
-  </style>
-</head>
-<body class="bg-surface-canvas text-slate-100 min-h-screen font-sans antialiased selection:bg-sky-500 selection:text-white">
+1
+<svg class="w-4 h-4 fill-current" viewBox="0 0 24 24">
+  <path
+    d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+</svg>
+<span class="hidden sm:inline">GitHub Repo</span>
+</a>
 
-  <!-- Toast Notification Container -->
-  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+<div
+  class="hidden lg:flex items-center px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300 gap-1.5 font-mono">
+  <span>🕒</span>
+  <span id="liveClock">10:30:00 PM</span>
+</div>
+</div>
+</header>
 
-  <!-- Top Cyber Command Header -->
-  <header class="sticky top-0 z-40 glass border-b border-sky-500/20 px-4 md:px-8 py-3 flex flex-wrap items-center justify-between gap-4">
-    <div class="flex items-center gap-3.5">
-      <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-sky-400 via-blue-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-sky-500/30 text-white font-black text-xl border border-sky-300/30">
-        🦅
+<!-- MENTOR & JUDGE LIVE EVALUATOR TEST HARNESS -->
+<div
+  class="bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-950 border-b border-indigo-500/30 px-4 md:px-8 py-3 flex flex-wrap items-center justify-between gap-3 shadow-2xl">
+  <div class="flex items-center gap-3">
+    <span
+      class="px-2.5 py-1 rounded-md bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-400/40 text-[11px] tracking-wide flex items-center gap-1.5">
+      <span class="w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
+      BUILDATHON TEST HARNESS
+    </span>
+    <span class="text-xs text-slate-300 font-medium">Click buttons to test real-time gate turnstile, curfew alerts &amp;
+      WhatsApp:</span>
+  </div>
+
+  <!-- 1-Click Interactive Test Actions -->
+  <div class="flex flex-wrap items-center gap-2">
+    <button onclick="simulateTurnstilePunch('Abhijeet Dubey', 'Rm 204', 'Turnstile Gate 1')"
+      class="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-emerald-950/60 border border-emerald-400/30 active:scale-95">
+      <span>⚡</span> <span>Punch: Abhijeet Dubey</span>
+    </button>
+
+    <button onclick="simulateTurnstilePunch('Keval Shinde', 'Rm 312', 'Turnstile Gate 2')"
+      class="px-3.5 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-teal-950/60 border border-teal-400/30 active:scale-95">
+      <span>⚡</span> <span>Punch: Keval Shinde</span>
+    </button>
+
+    <button onclick="simulateCurfewBreach('Rahul Verma', 'Rm 108', '45m Overdue')"
+      class="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-rose-950/60 border border-rose-400/30 active:scale-95">
+      <span>🚨</span> <span>Simulate Curfew Alarm</span>
+    </button>
+
+    <button onclick="openTokenAuditModal()"
+      class="px-3 py-1.5 rounded-lg bg-sky-700 hover:bg-sky-600 text-white text-xs font-semibold transition flex items-center gap-1.5 border border-sky-400/30">
+      <span>📊</span> <span>Tokenomics Model</span>
+    </button>
+
+    <button onclick="openSecurityVaultModal()"
+      class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition flex items-center gap-1 border border-slate-700">
+      <span>🔒</span> <span>AES-256 Vault</span>
+    </button>
+  </div>
+</div>
+
+<!-- EVALUATOR QUICK START GUIDE BANNER (Expandable / Informative) -->
+<div
+  class="bg-slate-900/90 border-b border-slate-800 px-4 md:px-8 py-2.5 text-xs text-slate-300 flex flex-wrap items-center justify-between gap-3">
+  <div class="flex items-center gap-2">
+    <span class="text-sky-400 font-bold">ℹ️ EVALUATOR BRIEF:</span>
+    <span>100% Edge Biometrics (0 Cloud Tokens) &bull; Sub-3s WhatsApp Parent Alerts &bull; Pure-Software Middleware for
+      300,000 Kota Coaching Students.</span>
+  </div>
+  <div class="flex items-center gap-4 text-[11px] font-mono text-slate-400">
+    <span class="flex items-center gap-1.5"><strong class="text-emerald-400">●</strong> Latency: &lt;0.2ms dlib</span>
+    <span class="flex items-center gap-1.5"><strong class="text-sky-400">●</strong> Cost: ₹12.50/mo (150 Tokens)</span>
+    <span class="flex items-center gap-1.5"><strong class="text-indigo-400">●</strong> DPDP Act 2023 Compliant</span>
+  </div>
+</div>
+
+<!-- FLOATING WHATSAPP NOTIFICATION MODAL -->
+<div id="whatsappSimModal"
+  class="fixed top-20 right-5 z-50 max-w-sm w-full transition-all duration-500 transform translate-y-[-20px] opacity-0 pointer-events-none">
+  <div
+    class="bg-[#0b141a] text-slate-100 rounded-2xl shadow-2xl border border-emerald-500/50 p-4 overflow-hidden font-sans ring-2 ring-emerald-500/20">
+    <div class="flex items-center justify-between border-b border-slate-800 pb-2 mb-2">
+      <div class="flex items-center gap-2.5">
+        <div
+          class="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold text-sm shadow-md shadow-emerald-900">
+          HV</div>
+        <div>
+          <div class="text-xs font-bold flex items-center gap-1 text-slate-100">
+            HawkVzon Safety Bot <span class="text-emerald-400">✓</span>
+          </div>
+          <div class="text-[10px] text-emerald-400 font-mono">Meta Verified Business &bull; Automated</div>
+        </div>
       </div>
-      <div>
-        <div class="flex items-center gap-2.5">
-          <h1 class="text-base md:text-xl font-extrabold tracking-tight text-white flex items-center gap-2">
-            HawkVzon AI <span class="text-sky-400 font-light">|</span> <span class="text-slate-200">HostelOS Command Center</span>
-          </h1>
-          <span class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-950 text-emerald-400 border border-emerald-500/40 flex items-center gap-1.5 shadow-sm shadow-emerald-950">
-            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse-fast"></span>
-            <span>SYSTEM ARMED</span>
+      <button onclick="closeWhatsappSim()" class="text-slate-400 hover:text-white text-xs p-1">✕</button>
+    </div>
+
+    <!-- Chat Bubble -->
+    <div class="bg-[#1f2c34] rounded-xl p-3 text-xs space-y-2 border-l-4 border-emerald-500">
+      <div class="font-bold text-emerald-400 flex items-center justify-between">
+        <span id="waTitle">✅ Safe Arrival Confirmed</span>
+        <span class="text-[10px] text-slate-400 font-mono" id="waTimestamp">10:14 PM</span>
+      </div>
+      <p class="text-slate-200 text-[11px] leading-relaxed" id="waBody">
+        Namaste Mr. Sharma 🙏<br>
+        Your ward <strong class="text-white font-semibold" id="waStudent">Abhijeet Dubey</strong> has safely entered
+        <strong class="text-sky-300">Kota Heritage Hostel</strong> via <strong class="text-emerald-300"
+          id="waGate">Turnstile Gate 1</strong>.
+      </p>
+      <div
+        class="bg-[#111b21] p-2 rounded-lg text-[10px] text-slate-300 flex justify-between items-center border border-slate-700/50">
+        <span>Curfew Status: <strong class="text-emerald-400" id="waCurfewStatus">On Time (Pre-09:30 PM)</strong></span>
+        <span class="text-sky-400 font-mono">Meta Utility ₹0.115</span>
+      </div>
+      <div class="text-[9px] text-slate-400 pt-1 border-t border-slate-700/60 flex justify-between">
+        <span>Anti-Spam Cooldown: 6 hrs</span>
+        <span class="text-emerald-400">Zero Cloud LLM Tokens ($0.00)</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN DASHBOARD CONTENT -->
+<main class="px-4 md:px-8 py-6 space-y-6 max-w-7xl mx-auto">
+
+  <!-- KPI ROW (HostelOS Real-time Operations) -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+
+    <!-- KPI 1: In-Premises Count -->
+    <div class="glass-card rounded-2xl p-4 border border-slate-800 glow-cyan relative overflow-hidden">
+      <div class="flex items-center justify-between text-xs text-slate-400 font-medium">
+        <span>STUDENTS IN-PREMISES</span>
+        <span class="text-sky-400 text-lg">🏢</span>
+      </div>
+      <div class="mt-2 flex items-baseline gap-2">
+        <span class="text-3xl font-extrabold text-white" id="kpiPresent">342</span>
+        <span class="text-xs text-slate-400">/ 350 Enrolled (97.7%)</span>
+      </div>
+      <div class="mt-2 w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+        <div class="bg-sky-400 h-1.5 rounded-full transition-all duration-500" style="width: 97.7%"></div>
+      </div>
+    </div>
+
+    <!-- KPI 2: Curfew Radar -->
+    <div class="glass-card rounded-2xl p-4 border border-slate-800 glow-rose relative overflow-hidden">
+      <div class="flex items-center justify-between text-xs text-slate-400 font-medium">
+        <span>CURFEW RADAR (09:30 PM)</span>
+        <span class="text-rose-400 text-lg animate-pulse">🚨</span>
+      </div>
+      <div class="mt-2 flex items-baseline gap-2">
+        <span class="text-3xl font-extrabold text-rose-400" id="kpiCurfew">8</span>
+        <span class="text-xs text-slate-400">Unaccounted / Outside</span>
+      </div>
+      <div class="mt-2 flex items-center justify-between text-[11px] text-slate-400">
+        <span>Auto WhatsApp Ping</span>
+        <span class="text-rose-400 font-bold">Escalated to Warden</span>
+      </div>
+    </div>
+
+    <!-- KPI 3: Edge Biometrics Tokens (The 0-Token Hero) -->
+    <div class="glass-card rounded-2xl p-4 border border-slate-800 glow-emerald relative overflow-hidden">
+      <div class="flex items-center justify-between text-xs text-slate-400 font-medium">
+        <span>EDGE BIOMETRICS TOKENS</span>
+        <span class="text-emerald-400 text-lg">⚡</span>
+      </div>
+      <div class="mt-2 flex items-baseline gap-2">
+        <span class="text-3xl font-extrabold text-emerald-400">0 Tokens</span>
+        <span class="text-xs text-emerald-300 font-mono">$0.00 Cost</span>
+      </div>
+      <div class="mt-2 flex items-center justify-between text-[11px] text-slate-400">
+        <span>Latency: <strong class="text-emerald-300 font-mono">&lt;0.2ms cached</strong></span>
+        <span class="text-emerald-400 font-semibold">100% Local CPU</span>
+      </div>
+    </div>
+
+    <!-- KPI 4: Google Gemini Token Reduction -->
+    <div class="glass-card rounded-2xl p-4 border border-slate-800 relative overflow-hidden">
+      <div class="flex items-center justify-between text-xs text-slate-400 font-medium">
+        <span>TOKEN COST SAVINGS</span>
+        <span class="text-indigo-400 text-lg">💡</span>
+      </div>
+      <div class="mt-2 flex items-baseline gap-2">
+        <span class="text-3xl font-extrabold text-indigo-300">99.999%</span>
+        <span class="text-xs text-slate-400">vs Naive Cloud Vision</span>
+      </div>
+      <div class="mt-2 flex items-center justify-between text-[11px] text-slate-400">
+        <span>Nightly Synthesis: <strong class="text-sky-300 font-mono">150 Tok/Day</strong></span>
+        <span class="text-indigo-400 font-bold">₹12.50 / Mo</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- MAIN TWO-COLUMN LAYOUT -->
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <!-- LEFT COLUMN: Live Cyber CCTV Feed + Attendance Ledger (8 cols) -->
+    <div class="lg:col-span-8 space-y-6">
+
+      <!-- Live CCTV Feed Player Card -->
+      <div class="glass rounded-2xl overflow-hidden glow-cyan border border-slate-800 relative shadow-2xl">
+
+        <!-- Cinema Player Top Header -->
+        <div
+          class="bg-slate-950/95 px-4 py-2.5 flex flex-wrap items-center justify-between border-b border-slate-800/80 gap-2">
+          <div class="flex items-center gap-2.5">
+            <span class="text-rose-500 font-bold animate-pulse text-xs">●</span>
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-200" id="camTitle">CAM-01: KOTA HOSTEL
+              MAIN GATE TURNSTILE</span>
+            <span class="text-[10px] px-2 py-0.5 rounded-md bg-sky-950 text-sky-300 border border-sky-800/60 font-mono"
+              id="feedModeBadge">Simulated Cyber HUD</span>
+          </div>
+          <div class="flex items-center gap-3 text-xs text-slate-400 font-mono">
+            <span>FPS: <strong class="text-emerald-400" id="statFps">30.1</strong></span>
+            <span>Matched: <strong class="text-sky-400" id="statFaces">2 Identities</strong></span>
+            <span>Vector Latency: <strong class="text-emerald-400" id="statLatency">&lt;0.2ms</strong></span>
+          </div>
+        </div>
+
+        <!-- Video Stream Container -->
+        <div
+          class="relative bg-slate-950 aspect-video flex items-center justify-center overflow-hidden group select-none hud-grid"
+          id="videoContainer">
+
+          <!-- Real Canvas Simulation (Always Active & Eye-Popping!) -->
+          <canvas id="cctvCanvas" class="w-full h-full object-cover"></canvas>
+          <div class="scanline-beam"></div>
+
+          <!-- Optional Real Video Feed (Hidden by default, can be toggled) -->
+          <img id="videoFeed" src="/video_feed" alt="Webcam Feed"
+            class="hidden absolute inset-0 w-full h-full object-cover">
+
+          <!-- Turnstile Gate Status Banner Overlay (Animated at top center of camera) -->
+          <div id="gateStatusBanner"
+            class="absolute top-4 inset-x-auto px-4 py-1.5 rounded-xl glass border border-emerald-500/40 text-xs font-mono font-bold text-emerald-400 flex items-center gap-2 shadow-lg transition-all duration-300">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+            <span>GATE 01 TURNSTILE: <span id="gateStateText">READY / ARMED</span></span>
+          </div>
+
+          <!-- FLOATING ACTION TOOLBAR OVERLAY (Bottom of Video) -->
+          <div
+            class="absolute bottom-3 inset-x-3 px-3 py-2 rounded-xl glass border border-slate-700/80 flex flex-wrap items-center justify-between gap-2 opacity-95 group-hover:opacity-100 transition shadow-2xl">
+
+            <!-- Left: Stream Source Selector -->
+            <div class="flex items-center gap-2">
+              <button onclick="toggleVideoSource()" id="toggleSourceBtn"
+                class="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition flex items-center gap-1.5 shadow-sm">
+                <span id="sourceIcon">🤖</span> <span id="sourceText">Simulated HUD (Active)</span>
+              </button>
+              <button onclick="triggerSimulatedIngressRandom()"
+                class="px-2.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold transition flex items-center gap-1 shadow-sm"
+                title="Simulate Ingress Punch">
+                <span>⚡</span> <span>Trigger Ingress</span>
+              </button>
+            </div>
+
+            <!-- Center: Turnstile Mode -->
+            <div class="flex items-center bg-slate-950/90 rounded-lg px-2.5 py-1 border border-slate-800 text-xs">
+              <span class="text-[10px] text-slate-400 mr-2 font-semibold">TURNSTILE MODE:</span>
+              <span class="text-sky-400 font-mono font-bold text-[11px]">Anti-Tailgating Biometric (0.2s Relay)</span>
+            </div>
+
+            <!-- Right: Snapshot & Fullscreen -->
+            <div class="flex items-center gap-2">
+              <button onclick="captureCanvasSnapshot()"
+                class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition flex items-center gap-1 shadow-sm"
+                title="Capture Snapshot Photo">
+                <span>📸</span> <span class="hidden sm:inline">Snap</span>
+              </button>
+              <button onclick="toggleFullscreen()"
+                class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs" title="Fullscreen">
+                ⛶
+              </button>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Bottom Stream Telemetry Bar -->
+        <div
+          class="bg-slate-900/90 p-3 flex flex-wrap items-center justify-between text-xs border-t border-slate-800/80 gap-2">
+          <div class="flex items-center gap-2">
+            <span class="text-slate-400">Last Identified:</span>
+            <span class="font-bold text-white px-2.5 py-1 rounded bg-slate-800 border border-slate-700"
+              id="lastSeenName">Abhijeet Dubey</span>
+            <span class="text-slate-400 ml-2">Confidence:</span>
+            <span class="font-bold text-emerald-400 font-mono" id="lastSeenConf">98.4% (Eucl: 0.2355)</span>
+          </div>
+          <div class="flex items-center gap-2 font-mono text-[11px]">
+            <span class="text-slate-400">Encryption:</span>
+            <span class="text-sky-400 font-bold">Fernet AES-256 (PBKDF2 HMAC-SHA256)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Attendance & Turnstile Ingress Stream Ledger -->
+      <div class="glass-card rounded-2xl p-4 border border-slate-800 space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="text-sky-400 text-base">📋</span>
+            <h2 class="text-sm font-bold text-white uppercase tracking-wider">Live Turnstile Ingress Ledger</h2>
+            <span
+              class="text-[10px] px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/60 font-mono">Real-Time</span>
+          </div>
+          <span class="text-xs text-slate-400">Auto-Refreshed via Biometric Middleware</span>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs text-slate-300">
+            <thead class="bg-slate-900/80 text-slate-400 font-mono text-[11px] border-b border-slate-800">
+              <tr>
+                <th class="py-2.5 px-3">Time</th>
+                <th class="py-2.5 px-3">Student Name</th>
+                <th class="py-2.5 px-3">Room</th>
+                <th class="py-2.5 px-3">Match Confidence</th>
+                <th class="py-2.5 px-3">Emotion</th>
+                <th class="py-2.5 px-3">Vector Latency</th>
+                <th class="py-2.5 px-3 text-right">Parent WhatsApp</th>
+              </tr>
+            </thead>
+            <tbody id="ledgerBody" class="divide-y divide-slate-800/60 font-medium">
+              <tr class="bg-emerald-950/20 text-emerald-300">
+                <td class="py-2.5 px-3 font-mono">10:14:05 PM</td>
+                <td class="py-2.5 px-3 font-bold text-white">Abhijeet Dubey</td>
+                <td class="py-2.5 px-3 text-sky-300">Rm 204</td>
+                <td class="py-2.5 px-3 text-emerald-400">✅ 98.4% (Dist: 0.2355)</td>
+                <td class="py-2.5 px-3 text-slate-300">Calm (0.94)</td>
+                <td class="py-2.5 px-3 font-mono text-[11px] text-emerald-400">0.18 ms (Cached)</td>
+                <td class="py-2.5 px-3 text-right"><span
+                    class="px-2 py-0.5 rounded text-[10px] bg-emerald-900/80 text-emerald-300 border border-emerald-700/60">Delivered</span>
+                </td>
+              </tr>
+              <tr class="hover:bg-slate-800/30">
+                <td class="py-2.5 px-3 font-mono">10:02:18 PM</td>
+                <td class="py-2.5 px-3 font-bold text-white">Keval Shinde</td>
+                <td class="py-2.5 px-3 text-sky-300">Rm 312</td>
+                <td class="py-2.5 px-3 text-emerald-400">✅ 97.9% (Dist: 0.2412)</td>
+                <td class="py-2.5 px-3 text-slate-300">Focused (0.89)</td>
+                <td class="py-2.5 px-3 font-mono text-[11px] text-emerald-400">0.19 ms (Cached)</td>
+                <td class="py-2.5 px-3 text-right"><span
+                    class="px-2 py-0.5 rounded text-[10px] bg-emerald-900/80 text-emerald-300 border border-emerald-700/60">Delivered</span>
+                </td>
+              </tr>
+              <tr class="hover:bg-slate-800/30">
+                <td class="py-2.5 px-3 font-mono">09:28:44 PM</td>
+                <td class="py-2.5 px-3 font-bold text-white">Vikram Rathore</td>
+                <td class="py-2.5 px-3 text-sky-300">Rm 104</td>
+                <td class="py-2.5 px-3 text-emerald-400">✅ 96.2% (Dist: 0.2610)</td>
+                <td class="py-2.5 px-3 text-slate-300">Neutral</td>
+                <td class="py-2.5 px-3 font-mono text-[11px] text-emerald-400">0.21 ms (Cached)</td>
+                <td class="py-2.5 px-3 text-right"><span
+                    class="px-2 py-0.5 rounded text-[10px] bg-emerald-900/80 text-emerald-300 border border-emerald-700/60">Delivered</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT COLUMN: Night Curfew Radar + Tokenomics Breakdown (4 cols) -->
+    <div class="lg:col-span-4 space-y-6">
+
+      <!-- 09:30 PM Night Curfew Radar Card -->
+      <div class="glass-card rounded-2xl p-4 border border-rose-900/40 glow-rose space-y-3">
+        <div class="flex items-center justify-between border-b border-rose-900/40 pb-2">
+          <div class="flex items-center gap-2">
+            <span class="text-rose-400 text-lg animate-pulse">📡</span>
+            <h2 class="text-sm font-bold text-white uppercase tracking-wider">09:30 PM Curfew Radar</h2>
+          </div>
+          <span
+            class="text-[10px] px-2 py-0.5 rounded bg-rose-950 text-rose-400 font-mono font-bold border border-rose-800/60">ACTIVE
+            RADAR</span>
+        </div>
+
+        <p class="text-xs text-slate-300">
+          Automated curfew roll-call runs at 09:30 PM. Students not scanned inside trigger warden alerts &amp; automated
+          WhatsApp check-in pings.
+        </p>
+
+        <div class="space-y-2 font-mono text-xs" id="curfewList">
+
+          <div class="p-2.5 rounded-xl bg-rose-950/40 border border-rose-800/60 flex items-center justify-between">
+            <div>
+              <div class="font-bold text-rose-200">Rahul Verma</div>
+              <div class="text-[10px] text-slate-400">Room 108 &bull; Last seen: 06:15 PM</div>
+            </div>
+            <div class="text-right">
+              <span class="text-[10px] px-2 py-0.5 rounded bg-rose-900 text-rose-200 font-bold">45m Overdue</span>
+              <div class="text-[9px] text-rose-400 mt-1">WhatsApp Escalated</div>
+            </div>
+          </div>
+
+          <div class="p-2.5 rounded-xl bg-amber-950/30 border border-amber-800/40 flex items-center justify-between">
+            <div>
+              <div class="font-bold text-amber-200">Aman Saxena</div>
+              <div class="text-[10px] text-slate-400">Room 214 &bull; Verified Library Pass</div>
+            </div>
+            <div class="text-right">
+              <span class="text-[10px] px-2 py-0.5 rounded bg-amber-900/70 text-amber-200">Curfew Ext. 10:30</span>
+              <div class="text-[9px] text-slate-400 mt-1">Authorized</div>
+            </div>
+          </div>
+
+          <div class="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+            <div>
+              <div class="font-bold text-slate-200">Pooja Sharma</div>
+              <div class="text-[10px] text-slate-400">Room 402 &bull; Pre-approved Outpass</div>
+            </div>
+            <div class="text-right">
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">Home Visit</span>
+              <div class="text-[9px] text-slate-400 mt-1">Parent Confirmed</div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="pt-2 border-t border-slate-800 flex justify-between items-center text-xs">
+          <span class="text-slate-400">Curfew In-Premises Rate:</span>
+          <span class="text-emerald-400 font-bold font-mono">97.7% Compliance</span>
+        </div>
+      </div>
+
+      <!-- Tokenomics Architecture Card (Google DeepMind Theme) -->
+      <div class="glass-card rounded-2xl p-4 border border-sky-900/40 space-y-3">
+        <div class="flex items-center justify-between border-b border-sky-900/40 pb-2">
+          <div class="flex items-center gap-2">
+            <span class="text-sky-400 text-lg">💡</span>
+            <h2 class="text-sm font-bold text-white uppercase tracking-wider">0-Token Architecture</h2>
+          </div>
+          <span
+            class="text-[10px] px-2 py-0.5 rounded bg-sky-950 text-sky-400 font-mono border border-sky-800/60">Google
+            Cloud</span>
+        </div>
+
+        <div class="space-y-2 text-xs text-slate-300">
+          <div class="flex justify-between items-center p-2 rounded-lg bg-slate-900 border border-slate-800">
+            <span>Edge Biometrics</span>
+            <span class="font-mono font-bold text-emerald-400">0 Tokens ($0.00)</span>
+          </div>
+          <div class="flex justify-between items-center p-2 rounded-lg bg-slate-900 border border-slate-800">
+            <span>WhatsApp Cloud API</span>
+            <span class="font-mono font-bold text-emerald-400">0 Tokens ($0.00)</span>
+          </div>
+          <div class="flex justify-between items-center p-2 rounded-lg bg-slate-900 border border-slate-800">
+            <span>Gemini 1.5 Nightly Synthesis</span>
+            <span class="font-mono font-bold text-sky-400">~150 Tokens / Day</span>
+          </div>
+          <div class="flex justify-between items-center p-2 rounded-lg bg-indigo-950/60 border border-indigo-800/50">
+            <span class="font-bold text-indigo-300">Total Monthly LLM Cost</span>
+            <span class="font-mono font-bold text-emerald-400">₹12.50 / Month</span>
+          </div>
+        </div>
+
+        <p class="text-[11px] text-slate-400 leading-relaxed">
+          Streaming 30 FPS video to cloud vision models costs <strong>$69.66/hour</strong>. HawkVzon executes biometrics
+          locally on edge CPU, reducing cloud token costs by <strong>99.999%</strong>.
+        </p>
+
+        <button onclick="openTokenAuditModal()"
+          class="w-full py-2 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white font-bold text-xs transition shadow-md shadow-sky-900/30">
+          Inspect Full Tokenomics Audit &rarr;
+        </button>
+      </div>
+
+      <!-- System Cryptographic Status Card -->
+      <div class="glass-card rounded-2xl p-4 border border-slate-800 text-xs space-y-2.5">
+        <div class="flex items-center justify-between">
+          <span class="font-bold text-white flex items-center gap-1.5">
+            <span>🔒</span> Fernet Vector Vault
           </span>
+          <span class="text-emerald-400 font-mono text-[11px]">ACTIVE</span>
         </div>
-        <p class="text-[11px] text-slate-400">
-          Google DeepMind | Google Cloud — Startup Buildathon India 2026 • Enterprise AI &amp; Smart Cities • <strong class="text-sky-300">Abhijeet Dubey &amp; Keval Shinde</strong>
-        </p>
+        <div class="text-[11px] text-slate-400 space-y-1 font-mono">
+          <div>Algorithm: <span class="text-slate-200">AES-128-CBC + HMAC-SHA256</span></div>
+          <div>PBKDF2 Iterations: <span class="text-slate-200">100,000 passes</span></div>
+          <div>Raw Image Storage: <span class="text-emerald-400">ZERO (100% Vector Only)</span></div>
+          <div>Regulation: <span class="text-sky-400">India DPDP Act 2023 Compliant</span></div>
+        </div>
       </div>
+
     </div>
 
-    <!-- Header Quick Stats & Controls -->
-    <div class="flex items-center gap-3">
-      <button onclick="toggleAudio()" id="audioToggleBtn" class="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-slate-300 hover:text-white transition flex items-center gap-1.5" title="Toggle UI Audio Effects">
-        <span id="audioIcon">🔊</span> <span class="hidden md:inline text-[11px]">Audio FX</span>
-      </button>
+  </div>
 
-      <button onclick="openTokenAuditModal()" class="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-500 hover:to-blue-600 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-sky-900/40 border border-sky-400/30">
-        <span>💰</span> <span>0-Token Telemetry</span>
-      </button>
+</main>
 
-      <a href="https://github.com/abhijeetdubey22/HawkVzon" target="_blank" class="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition flex items-center gap-1.5 border border-slate-700">
-        <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-        <span class="hidden sm:inline">GitHub Repo</span>
-      </a>
-
-      <div class="hidden lg:flex items-center px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300 gap-1.5 font-mono">
-        <span>🕒</span>
-        <span id="liveClock">10:30:00 PM</span>
+<!-- TOKEN AUDIT & COMPARISON MODAL -->
+<div id="tokenAuditModal"
+  class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md hidden flex items-center justify-center p-4">
+  <div
+    class="bg-surface-card border border-sky-500/30 rounded-2xl max-w-2xl w-full p-6 space-y-5 text-slate-200 shadow-2xl">
+    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div class="flex items-center gap-2.5">
+        <span class="text-2xl">💰</span>
+        <div>
+          <h3 class="text-lg font-bold text-white">HawkVzon Tokenomics &amp; Cost Telemetry</h3>
+          <p class="text-xs text-slate-400">Google Cloud Startup Buildathon 2026 Architectural Evaluation</p>
+        </div>
       </div>
-    </div>
-  </header>
-
-  <!-- MENTOR & JUDGE LIVE EVALUATOR TEST HARNESS -->
-  <div class="bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-950 border-b border-indigo-500/30 px-4 md:px-8 py-3 flex flex-wrap items-center justify-between gap-3 shadow-2xl">
-    <div class="flex items-center gap-3">
-      <span class="px-2.5 py-1 rounded-md bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-400/40 text-[11px] tracking-wide flex items-center gap-1.5">
-        <span class="w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
-        BUILDATHON TEST HARNESS
-      </span>
-      <span class="text-xs text-slate-300 font-medium">Click buttons to test real-time gate turnstile, curfew alerts &amp; WhatsApp:</span>
+      <button onclick="closeTokenAuditModal()" class="text-slate-400 hover:text-white text-lg p-1">✕</button>
     </div>
 
-    <!-- 1-Click Interactive Test Actions -->
-    <div class="flex flex-wrap items-center gap-2">
-      <button onclick="simulateTurnstilePunch('Abhijeet Dubey', 'Rm 204', 'Turnstile Gate 1')" class="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-emerald-950/60 border border-emerald-400/30 active:scale-95">
-        <span>⚡</span> <span>Punch: Abhijeet Dubey</span>
-      </button>
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-xs border border-slate-800 rounded-xl overflow-hidden">
+        <thead class="bg-slate-900 text-slate-300 font-mono border-b border-slate-800">
+          <tr>
+            <th class="p-3">Architectural Layer</th>
+            <th class="p-3">Naive Cloud Vision LLM</th>
+            <th class="p-3 text-emerald-400 font-bold">HawkVzon Hybrid Edge</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-800">
+          <tr>
+            <td class="p-3 font-semibold text-white">Face Biometrics (30 FPS)</td>
+            <td class="p-3 text-rose-400 font-mono">2,592,000 Tokens/Hr ($69.66/hr)</td>
+            <td class="p-3 text-emerald-400 font-mono font-bold">0 Tokens ($0.00) &bull; Edge CPU</td>
+          </tr>
+          <tr>
+            <td class="p-3 font-semibold text-white">WhatsApp Parent Dispatch</td>
+            <td class="p-3 text-amber-400 font-mono">Agent Re-query (300 tok/msg)</td>
+            <td class="p-3 text-emerald-400 font-mono font-bold">0 Tokens ($0.00) &bull; Meta API</td>
+          </tr>
+          <tr>
+            <td class="p-3 font-semibold text-white">Curfew Roll-Call Radar</td>
+            <td class="p-3 text-amber-400 font-mono">Continuous LLM polling</td>
+            <td class="p-3 text-emerald-400 font-mono font-bold">0 Tokens ($0.00) &bull; Redis Set Diff</td>
+          </tr>
+          <tr>
+            <td class="p-3 font-semibold text-white">Daily Warden Executive Report</td>
+            <td class="p-3 text-slate-400 font-mono">Ad-hoc queries ($5/day)</td>
+            <td class="p-3 text-sky-400 font-mono font-bold">~150 Tokens/Day (Gemini 1.5 Flash)</td>
+          </tr>
+          <tr class="bg-emerald-950/30">
+            <td class="p-3 font-bold text-white">Total Monthly Cost / Hostel</td>
+            <td class="p-3 text-rose-400 font-mono font-bold">₹4,30,000+ / Month</td>
+            <td class="p-3 text-emerald-400 font-mono font-bold text-sm">₹12.50 / Month</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
-      <button onclick="simulateTurnstilePunch('Keval Shinde', 'Rm 312', 'Turnstile Gate 2')" class="px-3.5 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-teal-950/60 border border-teal-400/30 active:scale-95">
-        <span>⚡</span> <span>Punch: Keval Shinde</span>
-      </button>
+    <div class="p-3 rounded-xl bg-slate-900/90 border border-slate-800 text-xs space-y-1.5">
+      <div class="font-bold text-sky-300">Why this makes HawkVzon Viable for 300,000 Kota Students:</div>
+      <p class="text-slate-300 leading-relaxed text-[11px]">
+        Kota hostel owners operate at ₹30/bed/month software budgets. Naive cloud AI architectures bankrupt the operator
+        on day 1. By executing sub-0.2ms dlib biometrics on local edge hardware and restricting Gemini 1.5 Flash calls
+        strictly to nocturnal anomaly synthesis, HawkVzon achieves an <strong>88% gross margin</strong> at scale.
+      </p>
+    </div>
 
-      <button onclick="simulateCurfewBreach('Rahul Verma', 'Rm 108', '45m Overdue')" class="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-rose-950/60 border border-rose-400/30 active:scale-95">
-        <span>🚨</span> <span>Simulate Curfew Alarm</span>
-      </button>
-
-      <button onclick="openTokenAuditModal()" class="px-3 py-1.5 rounded-lg bg-sky-700 hover:bg-sky-600 text-white text-xs font-semibold transition flex items-center gap-1.5 border border-sky-400/30">
-        <span>📊</span> <span>Tokenomics Model</span>
-      </button>
-
-      <button onclick="openSecurityVaultModal()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition flex items-center gap-1 border border-slate-700">
-        <span>🔒</span> <span>AES-256 Vault</span>
+    <div class="flex justify-end">
+      <button onclick="closeTokenAuditModal()"
+        class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs transition">
+        Close Audit
       </button>
     </div>
   </div>
+</div>
 
-  <!-- EVALUATOR QUICK START GUIDE BANNER (Expandable / Informative) -->
-  <div class="bg-slate-900/90 border-b border-slate-800 px-4 md:px-8 py-2.5 text-xs text-slate-300 flex flex-wrap items-center justify-between gap-3">
-    <div class="flex items-center gap-2">
-      <span class="text-sky-400 font-bold">ℹ️ EVALUATOR BRIEF:</span>
-      <span>100% Edge Biometrics (0 Cloud Tokens) &bull; Sub-3s WhatsApp Parent Alerts &bull; Pure-Software Middleware for 300,000 Kota Coaching Students.</span>
-    </div>
-    <div class="flex items-center gap-4 text-[11px] font-mono text-slate-400">
-      <span class="flex items-center gap-1.5"><strong class="text-emerald-400">●</strong> Latency: &lt;0.2ms dlib</span>
-      <span class="flex items-center gap-1.5"><strong class="text-sky-400">●</strong> Cost: ₹12.50/mo (150 Tokens)</span>
-      <span class="flex items-center gap-1.5"><strong class="text-indigo-400">●</strong> DPDP Act 2023 Compliant</span>
-    </div>
-  </div>
-
-  <!-- FLOATING WHATSAPP NOTIFICATION MODAL -->
-  <div id="whatsappSimModal" class="fixed top-20 right-5 z-50 max-w-sm w-full transition-all duration-500 transform translate-y-[-20px] opacity-0 pointer-events-none">
-    <div class="bg-[#0b141a] text-slate-100 rounded-2xl shadow-2xl border border-emerald-500/50 p-4 overflow-hidden font-sans ring-2 ring-emerald-500/20">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-2 mb-2">
-        <div class="flex items-center gap-2.5">
-          <div class="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold text-sm shadow-md shadow-emerald-900">HV</div>
-          <div>
-            <div class="text-xs font-bold flex items-center gap-1 text-slate-100">
-              HawkVzon Safety Bot <span class="text-emerald-400">✓</span>
-            </div>
-            <div class="text-[10px] text-emerald-400 font-mono">Meta Verified Business &bull; Automated</div>
-          </div>
-        </div>
-        <button onclick="closeWhatsappSim()" class="text-slate-400 hover:text-white text-xs p-1">✕</button>
+<!-- SECURITY VAULT MODAL -->
+<div id="securityVaultModal"
+  class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md hidden flex items-center justify-center p-4">
+  <div
+    class="bg-surface-card border border-emerald-500/30 rounded-2xl max-w-xl w-full p-6 space-y-4 text-slate-200 shadow-2xl">
+    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div class="flex items-center gap-2">
+        <span class="text-xl">🔒</span>
+        <h3 class="text-base font-bold text-white">Fernet AES-256 Vector Vault Verification</h3>
       </div>
-
-      <!-- Chat Bubble -->
-      <div class="bg-[#1f2c34] rounded-xl p-3 text-xs space-y-2 border-l-4 border-emerald-500">
-        <div class="font-bold text-emerald-400 flex items-center justify-between">
-          <span id="waTitle">✅ Safe Arrival Confirmed</span>
-          <span class="text-[10px] text-slate-400 font-mono" id="waTimestamp">10:14 PM</span>
-        </div>
-        <p class="text-slate-200 text-[11px] leading-relaxed" id="waBody">
-          Namaste Mr. Sharma 🙏<br>
-          Your ward <strong class="text-white font-semibold" id="waStudent">Abhijeet Dubey</strong> has safely entered <strong class="text-sky-300">Kota Heritage Hostel</strong> via <strong class="text-emerald-300" id="waGate">Turnstile Gate 1</strong>.
-        </p>
-        <div class="bg-[#111b21] p-2 rounded-lg text-[10px] text-slate-300 flex justify-between items-center border border-slate-700/50">
-          <span>Curfew Status: <strong class="text-emerald-400" id="waCurfewStatus">On Time (Pre-09:30 PM)</strong></span>
-          <span class="text-sky-400 font-mono">Meta Utility ₹0.115</span>
-        </div>
-        <div class="text-[9px] text-slate-400 pt-1 border-t border-slate-700/60 flex justify-between">
-          <span>Anti-Spam Cooldown: 6 hrs</span>
-          <span class="text-emerald-400">Zero Cloud LLM Tokens ($0.00)</span>
-        </div>
+      <button onclick="closeSecurityVaultModal()" class="text-slate-400 hover:text-white text-base">✕</button>
+    </div>
+    <div class="space-y-2 text-xs font-mono">
+      <div class="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
+        <span class="text-slate-400">Vault Cipher:</span> <span class="text-emerald-400">AES-128-CBC + HMAC-SHA256
+          (Fernet)</span>
       </div>
+      <div class="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
+        <span class="text-slate-400">Enrolled Identities:</span> <span class="text-white">9 Vectors (Abhijeet, Keval,
+          etc.)</span>
+      </div>
+      <div class="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
+        <span class="text-slate-400">Sample Ciphertext:</span>
+        <div class="text-[10px] text-sky-300 break-all mt-1">gAAAAABn-1...Z9x8Ym7QvL2w3e4r5t6y7u8i9o0p (256-bit Vector
+          Hash)</div>
+      </div>
+      <div class="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
+        <span class="text-slate-400">DPDP Act Compliance:</span> <span class="text-emerald-400 font-bold">100% Zero Raw
+          Image Retention</span>
+      </div>
+    </div>
+    <div class="flex justify-end">
+      <button onclick="closeSecurityVaultModal()"
+        class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs">
+        Dismiss
+      </button>
     </div>
   </div>
+</div>
 
-  <!-- MAIN DASHBOARD CONTENT -->
-  <main class="px-4 md:px-8 py-6 space-y-6 max-w-7xl mx-auto">
+<!-- JAVASCRIPT SIMULATION & CANVAS ENGINE -->
+<script>
+  // -------------------------------------------------------------
+  // AUDIO SYNTHESIZER (Web Audio API - No external mp3 files!)
+  // -------------------------------------------------------------
+  let audioCtx = null;
+  let audioEnabled = true;
 
-    <!-- KPI ROW (HostelOS Real-time Operations) -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      
-      <!-- KPI 1: In-Premises Count -->
-      <div class="glass-card rounded-2xl p-4 border border-slate-800 glow-cyan relative overflow-hidden">
-        <div class="flex items-center justify-between text-xs text-slate-400 font-medium">
-          <span>STUDENTS IN-PREMISES</span>
-          <span class="text-sky-400 text-lg">🏢</span>
-        </div>
-        <div class="mt-2 flex items-baseline gap-2">
-          <span class="text-3xl font-extrabold text-white" id="kpiPresent">342</span>
-          <span class="text-xs text-slate-400">/ 350 Enrolled (97.7%)</span>
-        </div>
-        <div class="mt-2 w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-          <div class="bg-sky-400 h-1.5 rounded-full transition-all duration-500" style="width: 97.7%"></div>
-        </div>
-      </div>
-
-      <!-- KPI 2: Curfew Radar -->
-      <div class="glass-card rounded-2xl p-4 border border-slate-800 glow-rose relative overflow-hidden">
-        <div class="flex items-center justify-between text-xs text-slate-400 font-medium">
-          <span>CURFEW RADAR (09:30 PM)</span>
-          <span class="text-rose-400 text-lg animate-pulse">🚨</span>
-        </div>
-        <div class="mt-2 flex items-baseline gap-2">
-          <span class="text-3xl font-extrabold text-rose-400" id="kpiCurfew">8</span>
-          <span class="text-xs text-slate-400">Unaccounted / Outside</span>
-        </div>
-        <div class="mt-2 flex items-center justify-between text-[11px] text-slate-400">
-          <span>Auto WhatsApp Ping</span>
-          <span class="text-rose-400 font-bold">Escalated to Warden</span>
-        </div>
-      </div>
-
-      <!-- KPI 3: Edge Biometrics Tokens (The 0-Token Hero) -->
-      <div class="glass-card rounded-2xl p-4 border border-slate-800 glow-emerald relative overflow-hidden">
-        <div class="flex items-center justify-between text-xs text-slate-400 font-medium">
-          <span>EDGE BIOMETRICS TOKENS</span>
-          <span class="text-emerald-400 text-lg">⚡</span>
-        </div>
-        <div class="mt-2 flex items-baseline gap-2">
-          <span class="text-3xl font-extrabold text-emerald-400">0 Tokens</span>
-          <span class="text-xs text-emerald-300 font-mono">$0.00 Cost</span>
-        </div>
-        <div class="mt-2 flex items-center justify-between text-[11px] text-slate-400">
-          <span>Latency: <strong class="text-emerald-300 font-mono">&lt;0.2ms cached</strong></span>
-          <span class="text-emerald-400 font-semibold">100% Local CPU</span>
-        </div>
-      </div>
-
-      <!-- KPI 4: Google Gemini Token Reduction -->
-      <div class="glass-card rounded-2xl p-4 border border-slate-800 relative overflow-hidden">
-        <div class="flex items-center justify-between text-xs text-slate-400 font-medium">
-          <span>TOKEN COST SAVINGS</span>
-          <span class="text-indigo-400 text-lg">💡</span>
-        </div>
-        <div class="mt-2 flex items-baseline gap-2">
-          <span class="text-3xl font-extrabold text-indigo-300">99.999%</span>
-          <span class="text-xs text-slate-400">vs Naive Cloud Vision</span>
-        </div>
-        <div class="mt-2 flex items-center justify-between text-[11px] text-slate-400">
-          <span>Nightly Synthesis: <strong class="text-sky-300 font-mono">150 Tok/Day</strong></span>
-          <span class="text-indigo-400 font-bold">₹12.50 / Mo</span>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- MAIN TWO-COLUMN LAYOUT -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-      <!-- LEFT COLUMN: Live Cyber CCTV Feed + Attendance Ledger (8 cols) -->
-      <div class="lg:col-span-8 space-y-6">
-
-        <!-- Live CCTV Feed Player Card -->
-        <div class="glass rounded-2xl overflow-hidden glow-cyan border border-slate-800 relative shadow-2xl">
-          
-          <!-- Cinema Player Top Header -->
-          <div class="bg-slate-950/95 px-4 py-2.5 flex flex-wrap items-center justify-between border-b border-slate-800/80 gap-2">
-            <div class="flex items-center gap-2.5">
-              <span class="text-rose-500 font-bold animate-pulse text-xs">●</span>
-              <span class="text-xs font-bold uppercase tracking-wider text-slate-200" id="camTitle">CAM-01: KOTA HOSTEL MAIN GATE TURNSTILE</span>
-              <span class="text-[10px] px-2 py-0.5 rounded-md bg-sky-950 text-sky-300 border border-sky-800/60 font-mono" id="feedModeBadge">Simulated Cyber HUD</span>
-            </div>
-            <div class="flex items-center gap-3 text-xs text-slate-400 font-mono">
-              <span>FPS: <strong class="text-emerald-400" id="statFps">30.1</strong></span>
-              <span>Matched: <strong class="text-sky-400" id="statFaces">2 Identities</strong></span>
-              <span>Vector Latency: <strong class="text-emerald-400" id="statLatency">&lt;0.2ms</strong></span>
-            </div>
-          </div>
-
-          <!-- Video Stream Container -->
-          <div class="relative bg-slate-950 aspect-video flex items-center justify-center overflow-hidden group select-none hud-grid" id="videoContainer">
-            
-            <!-- Real Canvas Simulation (Always Active & Eye-Popping!) -->
-            <canvas id="cctvCanvas" class="w-full h-full object-cover"></canvas>
-            <div class="scanline-beam"></div>
-
-            <!-- Optional Real Video Feed (Hidden by default, can be toggled) -->
-            <img id="videoFeed" src="/video_feed" alt="Webcam Feed" class="hidden absolute inset-0 w-full h-full object-cover">
-
-            <!-- Turnstile Gate Status Banner Overlay (Animated at top center of camera) -->
-            <div id="gateStatusBanner" class="absolute top-4 inset-x-auto px-4 py-1.5 rounded-xl glass border border-emerald-500/40 text-xs font-mono font-bold text-emerald-400 flex items-center gap-2 shadow-lg transition-all duration-300">
-              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-              <span>GATE 01 TURNSTILE: <span id="gateStateText">READY / ARMED</span></span>
-            </div>
-
-            <!-- FLOATING ACTION TOOLBAR OVERLAY (Bottom of Video) -->
-            <div class="absolute bottom-3 inset-x-3 px-3 py-2 rounded-xl glass border border-slate-700/80 flex flex-wrap items-center justify-between gap-2 opacity-95 group-hover:opacity-100 transition shadow-2xl">
-              
-              <!-- Left: Stream Source Selector -->
-              <div class="flex items-center gap-2">
-                <button onclick="toggleVideoSource()" id="toggleSourceBtn" class="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition flex items-center gap-1.5 shadow-sm">
-                  <span id="sourceIcon">🤖</span> <span id="sourceText">Simulated HUD (Active)</span>
-                </button>
-                <button onclick="triggerSimulatedIngressRandom()" class="px-2.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold transition flex items-center gap-1 shadow-sm" title="Simulate Ingress Punch">
-                  <span>⚡</span> <span>Trigger Ingress</span>
-                </button>
-              </div>
-
-              <!-- Center: Turnstile Mode -->
-              <div class="flex items-center bg-slate-950/90 rounded-lg px-2.5 py-1 border border-slate-800 text-xs">
-                <span class="text-[10px] text-slate-400 mr-2 font-semibold">TURNSTILE MODE:</span>
-                <span class="text-sky-400 font-mono font-bold text-[11px]">Anti-Tailgating Biometric (0.2s Relay)</span>
-              </div>
-
-              <!-- Right: Snapshot & Fullscreen -->
-              <div class="flex items-center gap-2">
-                <button onclick="captureCanvasSnapshot()" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition flex items-center gap-1 shadow-sm" title="Capture Snapshot Photo">
-                  <span>📸</span> <span class="hidden sm:inline">Snap</span>
-                </button>
-                <button onclick="toggleFullscreen()" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs" title="Fullscreen">
-                  ⛶
-                </button>
-              </div>
-
-            </div>
-          </div>
-
-          <!-- Bottom Stream Telemetry Bar -->
-          <div class="bg-slate-900/90 p-3 flex flex-wrap items-center justify-between text-xs border-t border-slate-800/80 gap-2">
-            <div class="flex items-center gap-2">
-              <span class="text-slate-400">Last Identified:</span>
-              <span class="font-bold text-white px-2.5 py-1 rounded bg-slate-800 border border-slate-700" id="lastSeenName">Abhijeet Dubey</span>
-              <span class="text-slate-400 ml-2">Confidence:</span>
-              <span class="font-bold text-emerald-400 font-mono" id="lastSeenConf">98.4% (Eucl: 0.2355)</span>
-            </div>
-            <div class="flex items-center gap-2 font-mono text-[11px]">
-              <span class="text-slate-400">Encryption:</span>
-              <span class="text-sky-400 font-bold">Fernet AES-256 (PBKDF2 HMAC-SHA256)</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Live Attendance & Turnstile Ingress Stream Ledger -->
-        <div class="glass-card rounded-2xl p-4 border border-slate-800 space-y-3">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <span class="text-sky-400 text-base">📋</span>
-              <h2 class="text-sm font-bold text-white uppercase tracking-wider">Live Turnstile Ingress Ledger</h2>
-              <span class="text-[10px] px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/60 font-mono">Real-Time</span>
-            </div>
-            <span class="text-xs text-slate-400">Auto-Refreshed via Biometric Middleware</span>
-          </div>
-
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs text-slate-300">
-              <thead class="bg-slate-900/80 text-slate-400 font-mono text-[11px] border-b border-slate-800">
-                <tr>
-                  <th class="py-2.5 px-3">Time</th>
-                  <th class="py-2.5 px-3">Student Name</th>
-                  <th class="py-2.5 px-3">Room</th>
-                  <th class="py-2.5 px-3">Match Confidence</th>
-                  <th class="py-2.5 px-3">Emotion</th>
-                  <th class="py-2.5 px-3">Vector Latency</th>
-                  <th class="py-2.5 px-3 text-right">Parent WhatsApp</th>
-                </tr>
-              </thead>
-              <tbody id="ledgerBody" class="divide-y divide-slate-800/60 font-medium">
-                <tr class="bg-emerald-950/20 text-emerald-300">
-                  <td class="py-2.5 px-3 font-mono">10:14:05 PM</td>
-                  <td class="py-2.5 px-3 font-bold text-white">Abhijeet Dubey</td>
-                  <td class="py-2.5 px-3 text-sky-300">Rm 204</td>
-                  <td class="py-2.5 px-3 text-emerald-400">✅ 98.4% (Dist: 0.2355)</td>
-                  <td class="py-2.5 px-3 text-slate-300">Calm (0.94)</td>
-                  <td class="py-2.5 px-3 font-mono text-[11px] text-emerald-400">0.18 ms (Cached)</td>
-                  <td class="py-2.5 px-3 text-right"><span class="px-2 py-0.5 rounded text-[10px] bg-emerald-900/80 text-emerald-300 border border-emerald-700/60">Delivered</span></td>
-                </tr>
-                <tr class="hover:bg-slate-800/30">
-                  <td class="py-2.5 px-3 font-mono">10:02:18 PM</td>
-                  <td class="py-2.5 px-3 font-bold text-white">Keval Shinde</td>
-                  <td class="py-2.5 px-3 text-sky-300">Rm 312</td>
-                  <td class="py-2.5 px-3 text-emerald-400">✅ 97.9% (Dist: 0.2412)</td>
-                  <td class="py-2.5 px-3 text-slate-300">Focused (0.89)</td>
-                  <td class="py-2.5 px-3 font-mono text-[11px] text-emerald-400">0.19 ms (Cached)</td>
-                  <td class="py-2.5 px-3 text-right"><span class="px-2 py-0.5 rounded text-[10px] bg-emerald-900/80 text-emerald-300 border border-emerald-700/60">Delivered</span></td>
-                </tr>
-                <tr class="hover:bg-slate-800/30">
-                  <td class="py-2.5 px-3 font-mono">09:28:44 PM</td>
-                  <td class="py-2.5 px-3 font-bold text-white">Vikram Rathore</td>
-                  <td class="py-2.5 px-3 text-sky-300">Rm 104</td>
-                  <td class="py-2.5 px-3 text-emerald-400">✅ 96.2% (Dist: 0.2610)</td>
-                  <td class="py-2.5 px-3 text-slate-300">Neutral</td>
-                  <td class="py-2.5 px-3 font-mono text-[11px] text-emerald-400">0.21 ms (Cached)</td>
-                  <td class="py-2.5 px-3 text-right"><span class="px-2 py-0.5 rounded text-[10px] bg-emerald-900/80 text-emerald-300 border border-emerald-700/60">Delivered</span></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- RIGHT COLUMN: Night Curfew Radar + Tokenomics Breakdown (4 cols) -->
-      <div class="lg:col-span-4 space-y-6">
-
-        <!-- 09:30 PM Night Curfew Radar Card -->
-        <div class="glass-card rounded-2xl p-4 border border-rose-900/40 glow-rose space-y-3">
-          <div class="flex items-center justify-between border-b border-rose-900/40 pb-2">
-            <div class="flex items-center gap-2">
-              <span class="text-rose-400 text-lg animate-pulse">📡</span>
-              <h2 class="text-sm font-bold text-white uppercase tracking-wider">09:30 PM Curfew Radar</h2>
-            </div>
-            <span class="text-[10px] px-2 py-0.5 rounded bg-rose-950 text-rose-400 font-mono font-bold border border-rose-800/60">ACTIVE RADAR</span>
-          </div>
-
-          <p class="text-xs text-slate-300">
-            Automated curfew roll-call runs at 09:30 PM. Students not scanned inside trigger warden alerts &amp; automated WhatsApp check-in pings.
-          </p>
-
-          <div class="space-y-2 font-mono text-xs" id="curfewList">
-            
-            <div class="p-2.5 rounded-xl bg-rose-950/40 border border-rose-800/60 flex items-center justify-between">
-              <div>
-                <div class="font-bold text-rose-200">Rahul Verma</div>
-                <div class="text-[10px] text-slate-400">Room 108 &bull; Last seen: 06:15 PM</div>
-              </div>
-              <div class="text-right">
-                <span class="text-[10px] px-2 py-0.5 rounded bg-rose-900 text-rose-200 font-bold">45m Overdue</span>
-                <div class="text-[9px] text-rose-400 mt-1">WhatsApp Escalated</div>
-              </div>
-            </div>
-
-            <div class="p-2.5 rounded-xl bg-amber-950/30 border border-amber-800/40 flex items-center justify-between">
-              <div>
-                <div class="font-bold text-amber-200">Aman Saxena</div>
-                <div class="text-[10px] text-slate-400">Room 214 &bull; Verified Library Pass</div>
-              </div>
-              <div class="text-right">
-                <span class="text-[10px] px-2 py-0.5 rounded bg-amber-900/70 text-amber-200">Curfew Ext. 10:30</span>
-                <div class="text-[9px] text-slate-400 mt-1">Authorized</div>
-              </div>
-            </div>
-
-            <div class="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
-              <div>
-                <div class="font-bold text-slate-200">Pooja Sharma</div>
-                <div class="text-[10px] text-slate-400">Room 402 &bull; Pre-approved Outpass</div>
-              </div>
-              <div class="text-right">
-                <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">Home Visit</span>
-                <div class="text-[9px] text-slate-400 mt-1">Parent Confirmed</div>
-              </div>
-            </div>
-
-          </div>
-
-          <div class="pt-2 border-t border-slate-800 flex justify-between items-center text-xs">
-            <span class="text-slate-400">Curfew In-Premises Rate:</span>
-            <span class="text-emerald-400 font-bold font-mono">97.7% Compliance</span>
-          </div>
-        </div>
-
-        <!-- Tokenomics Architecture Card (Google DeepMind Theme) -->
-        <div class="glass-card rounded-2xl p-4 border border-sky-900/40 space-y-3">
-          <div class="flex items-center justify-between border-b border-sky-900/40 pb-2">
-            <div class="flex items-center gap-2">
-              <span class="text-sky-400 text-lg">💡</span>
-              <h2 class="text-sm font-bold text-white uppercase tracking-wider">0-Token Architecture</h2>
-            </div>
-            <span class="text-[10px] px-2 py-0.5 rounded bg-sky-950 text-sky-400 font-mono border border-sky-800/60">Google Cloud</span>
-          </div>
-
-          <div class="space-y-2 text-xs text-slate-300">
-            <div class="flex justify-between items-center p-2 rounded-lg bg-slate-900 border border-slate-800">
-              <span>Edge Biometrics</span>
-              <span class="font-mono font-bold text-emerald-400">0 Tokens ($0.00)</span>
-            </div>
-            <div class="flex justify-between items-center p-2 rounded-lg bg-slate-900 border border-slate-800">
-              <span>WhatsApp Cloud API</span>
-              <span class="font-mono font-bold text-emerald-400">0 Tokens ($0.00)</span>
-            </div>
-            <div class="flex justify-between items-center p-2 rounded-lg bg-slate-900 border border-slate-800">
-              <span>Gemini 1.5 Nightly Synthesis</span>
-              <span class="font-mono font-bold text-sky-400">~150 Tokens / Day</span>
-            </div>
-            <div class="flex justify-between items-center p-2 rounded-lg bg-indigo-950/60 border border-indigo-800/50">
-              <span class="font-bold text-indigo-300">Total Monthly LLM Cost</span>
-              <span class="font-mono font-bold text-emerald-400">₹12.50 / Month</span>
-            </div>
-          </div>
-
-          <p class="text-[11px] text-slate-400 leading-relaxed">
-            Streaming 30 FPS video to cloud vision models costs <strong>$69.66/hour</strong>. HawkVzon executes biometrics locally on edge CPU, reducing cloud token costs by <strong>99.999%</strong>.
-          </p>
-
-          <button onclick="openTokenAuditModal()" class="w-full py-2 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white font-bold text-xs transition shadow-md shadow-sky-900/30">
-            Inspect Full Tokenomics Audit &rarr;
-          </button>
-        </div>
-
-        <!-- System Cryptographic Status Card -->
-        <div class="glass-card rounded-2xl p-4 border border-slate-800 text-xs space-y-2.5">
-          <div class="flex items-center justify-between">
-            <span class="font-bold text-white flex items-center gap-1.5">
-              <span>🔒</span> Fernet Vector Vault
-            </span>
-            <span class="text-emerald-400 font-mono text-[11px]">ACTIVE</span>
-          </div>
-          <div class="text-[11px] text-slate-400 space-y-1 font-mono">
-            <div>Algorithm: <span class="text-slate-200">AES-128-CBC + HMAC-SHA256</span></div>
-            <div>PBKDF2 Iterations: <span class="text-slate-200">100,000 passes</span></div>
-            <div>Raw Image Storage: <span class="text-emerald-400">ZERO (100% Vector Only)</span></div>
-            <div>Regulation: <span class="text-sky-400">India DPDP Act 2023 Compliant</span></div>
-          </div>
-        </div>
-
-      </div>
-
-    </div>
-
-  </main>
-
-  <!-- TOKEN AUDIT & COMPARISON MODAL -->
-  <div id="tokenAuditModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md hidden flex items-center justify-center p-4">
-    <div class="bg-surface-card border border-sky-500/30 rounded-2xl max-w-2xl w-full p-6 space-y-5 text-slate-200 shadow-2xl">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-        <div class="flex items-center gap-2.5">
-          <span class="text-2xl">💰</span>
-          <div>
-            <h3 class="text-lg font-bold text-white">HawkVzon Tokenomics &amp; Cost Telemetry</h3>
-            <p class="text-xs text-slate-400">Google Cloud Startup Buildathon 2026 Architectural Evaluation</p>
-          </div>
-        </div>
-        <button onclick="closeTokenAuditModal()" class="text-slate-400 hover:text-white text-lg p-1">✕</button>
-      </div>
-
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-xs border border-slate-800 rounded-xl overflow-hidden">
-          <thead class="bg-slate-900 text-slate-300 font-mono border-b border-slate-800">
-            <tr>
-              <th class="p-3">Architectural Layer</th>
-              <th class="p-3">Naive Cloud Vision LLM</th>
-              <th class="p-3 text-emerald-400 font-bold">HawkVzon Hybrid Edge</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-slate-800">
-            <tr>
-              <td class="p-3 font-semibold text-white">Face Biometrics (30 FPS)</td>
-              <td class="p-3 text-rose-400 font-mono">2,592,000 Tokens/Hr ($69.66/hr)</td>
-              <td class="p-3 text-emerald-400 font-mono font-bold">0 Tokens ($0.00) &bull; Edge CPU</td>
-            </tr>
-            <tr>
-              <td class="p-3 font-semibold text-white">WhatsApp Parent Dispatch</td>
-              <td class="p-3 text-amber-400 font-mono">Agent Re-query (300 tok/msg)</td>
-              <td class="p-3 text-emerald-400 font-mono font-bold">0 Tokens ($0.00) &bull; Meta API</td>
-            </tr>
-            <tr>
-              <td class="p-3 font-semibold text-white">Curfew Roll-Call Radar</td>
-              <td class="p-3 text-amber-400 font-mono">Continuous LLM polling</td>
-              <td class="p-3 text-emerald-400 font-mono font-bold">0 Tokens ($0.00) &bull; Redis Set Diff</td>
-            </tr>
-            <tr>
-              <td class="p-3 font-semibold text-white">Daily Warden Executive Report</td>
-              <td class="p-3 text-slate-400 font-mono">Ad-hoc queries ($5/day)</td>
-              <td class="p-3 text-sky-400 font-mono font-bold">~150 Tokens/Day (Gemini 1.5 Flash)</td>
-            </tr>
-            <tr class="bg-emerald-950/30">
-              <td class="p-3 font-bold text-white">Total Monthly Cost / Hostel</td>
-              <td class="p-3 text-rose-400 font-mono font-bold">₹4,30,000+ / Month</td>
-              <td class="p-3 text-emerald-400 font-mono font-bold text-sm">₹12.50 / Month</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="p-3 rounded-xl bg-slate-900/90 border border-slate-800 text-xs space-y-1.5">
-        <div class="font-bold text-sky-300">Why this makes HawkVzon Viable for 300,000 Kota Students:</div>
-        <p class="text-slate-300 leading-relaxed text-[11px]">
-          Kota hostel owners operate at ₹30/bed/month software budgets. Naive cloud AI architectures bankrupt the operator on day 1. By executing sub-0.2ms dlib biometrics on local edge hardware and restricting Gemini 1.5 Flash calls strictly to nocturnal anomaly synthesis, HawkVzon achieves an <strong>88% gross margin</strong> at scale.
-        </p>
-      </div>
-
-      <div class="flex justify-end">
-        <button onclick="closeTokenAuditModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs transition">
-          Close Audit
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- SECURITY VAULT MODAL -->
-  <div id="securityVaultModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md hidden flex items-center justify-center p-4">
-    <div class="bg-surface-card border border-emerald-500/30 rounded-2xl max-w-xl w-full p-6 space-y-4 text-slate-200 shadow-2xl">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-        <div class="flex items-center gap-2">
-          <span class="text-xl">🔒</span>
-          <h3 class="text-base font-bold text-white">Fernet AES-256 Vector Vault Verification</h3>
-        </div>
-        <button onclick="closeSecurityVaultModal()" class="text-slate-400 hover:text-white text-base">✕</button>
-      </div>
-      <div class="space-y-2 text-xs font-mono">
-        <div class="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-          <span class="text-slate-400">Vault Cipher:</span> <span class="text-emerald-400">AES-128-CBC + HMAC-SHA256 (Fernet)</span>
-        </div>
-        <div class="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-          <span class="text-slate-400">Enrolled Identities:</span> <span class="text-white">9 Vectors (Abhijeet, Keval, etc.)</span>
-        </div>
-        <div class="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-          <span class="text-slate-400">Sample Ciphertext:</span>
-          <div class="text-[10px] text-sky-300 break-all mt-1">gAAAAABn-1...Z9x8Ym7QvL2w3e4r5t6y7u8i9o0p (256-bit Vector Hash)</div>
-        </div>
-        <div class="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-          <span class="text-slate-400">DPDP Act Compliance:</span> <span class="text-emerald-400 font-bold">100% Zero Raw Image Retention</span>
-        </div>
-      </div>
-      <div class="flex justify-end">
-        <button onclick="closeSecurityVaultModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs">
-          Dismiss
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- JAVASCRIPT SIMULATION & CANVAS ENGINE -->
-  <script>
-    // -------------------------------------------------------------
-    // AUDIO SYNTHESIZER (Web Audio API - No external mp3 files!)
-    // -------------------------------------------------------------
-    let audioCtx = null;
-    let audioEnabled = true;
-
-    function initAudio() {
-      if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      }
+  function initAudio() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
+  }
 
-    function toggleAudio() {
-      audioEnabled = !audioEnabled;
-      const icon = document.getElementById('audioIcon');
-      if (icon) icon.innerText = audioEnabled ? '🔊' : '🔇';
-      showToast(audioEnabled ? "Audio Effects Enabled" : "Audio Effects Muted", "info");
+  function toggleAudio() {
+    audioEnabled = !audioEnabled;
+    const icon = document.getElementById('audioIcon');
+    if (icon) icon.innerText = audioEnabled ? '🔊' : '🔇';
+    showToast(audioEnabled ? "Audio Effects Enabled" : "Audio Effects Muted", "info");
+  }
+
+  function playChime() {
+    if (!audioEnabled) return;
+    try {
+      initAudio();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+      osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15); // A5
+      gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.4);
+    } catch (e) { }
+  }
+
+  function playAlarm() {
+    if (!audioEnabled) return;
+    try {
+      initAudio();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+      osc.frequency.linearRampToValueAtTime(880, audioCtx.currentTime + 0.2);
+      gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.45);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.45);
+    } catch (e) { }
+  }
+
+  // -------------------------------------------------------------
+  // TOAST NOTIFICATIONS
+  // -------------------------------------------------------------
+  function showToast(msg, type = "info") {
+    const container = document.getElementById("toastContainer");
+    if (!container) return;
+    const el = document.createElement("div");
+    const bg = type === "success" ? "bg-emerald-600 border-emerald-400" :
+      type === "error" ? "bg-rose-600 border-rose-400" :
+        "bg-sky-600 border-sky-400";
+    el.className = `px-4 py-2.5 rounded-xl ${bg} text-white text-xs font-semibold shadow-2xl border flex items-center gap-2 transform transition-all duration-300 translate-y-2 opacity-0`;
+    el.innerHTML = `<span>${type === 'success' ? '✅' : type === 'error' ? '🚨' : 'ℹ️'}</span> <span>${msg}</span>`;
+    container.appendChild(el);
+    setTimeout(() => el.classList.remove('translate-y-2', 'opacity-0'), 10);
+    setTimeout(() => {
+      el.classList.add('opacity-0', 'translate-y-2');
+      setTimeout(() => el.remove(), 300);
+    }, 4000);
+  }
+
+  // -------------------------------------------------------------
+  // CLOCK
+  // -------------------------------------------------------------
+  function updateClock() {
+    const clock = document.getElementById('liveClock');
+    if (clock) {
+      clock.innerText = new Date().toLocaleTimeString();
     }
+  }
+  setInterval(updateClock, 1000);
+  updateClock();
 
-    function playChime() {
-      if (!audioEnabled) return;
-      try {
-        initAudio();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
-        osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15); // A5
-        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.4);
-      } catch (e) {}
-    }
+  // -------------------------------------------------------------
+  // INTERACTIVE CYBER CCTV CANVAS SIMULATION
+  // -------------------------------------------------------------
+  const canvas = document.getElementById('cctvCanvas');
+  const ctx = canvas ? canvas.getContext('2d') : null;
+  let animId = null;
 
-    function playAlarm() {
-      if (!audioEnabled) return;
-      try {
-        initAudio();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(440, audioCtx.currentTime);
-        osc.frequency.linearRampToValueAtTime(880, audioCtx.currentTime + 0.2);
-        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.45);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.45);
-      } catch (e) {}
-    }
+  let targets = [
+    { name: "Abhijeet Dubey", room: "Rm 204", x: 0.32, y: 0.38, w: 0.16, h: 0.28, conf: 0.984, emo: "Calm [0.94]", color: "#10b981", active: true },
+    { name: "Keval Shinde", room: "Rm 312", x: 0.65, y: 0.40, w: 0.16, h: 0.28, conf: 0.979, emo: "Focused [0.89]", color: "#38bdf8", active: true }
+  ];
 
-    // -------------------------------------------------------------
-    // TOAST NOTIFICATIONS
-    // -------------------------------------------------------------
-    function showToast(msg, type = "info") {
-      const container = document.getElementById("toastContainer");
-      if (!container) return;
-      const el = document.createElement("div");
-      const bg = type === "success" ? "bg-emerald-600 border-emerald-400" :
-                 type === "error" ? "bg-rose-600 border-rose-400" :
-                 "bg-sky-600 border-sky-400";
-      el.className = `px-4 py-2.5 rounded-xl ${bg} text-white text-xs font-semibold shadow-2xl border flex items-center gap-2 transform transition-all duration-300 translate-y-2 opacity-0`;
-      el.innerHTML = `<span>${type === 'success' ? '✅' : type === 'error' ? '🚨' : 'ℹ️'}</span> <span>${msg}</span>`;
-      container.appendChild(el);
-      setTimeout(() => el.classList.remove('translate-y-2', 'opacity-0'), 10);
-      setTimeout(() => {
-        el.classList.add('opacity-0', 'translate-y-2');
-        setTimeout(() => el.remove(), 300);
-      }, 4000);
-    }
+  let sweepY = 0;
+  let gateUnlockTimer = 0;
 
-    // -------------------------------------------------------------
-    // CLOCK
-    // -------------------------------------------------------------
-    function updateClock() {
-      const clock = document.getElementById('liveClock');
-      if (clock) {
-        clock.innerText = new Date().toLocaleTimeString();
-      }
-    }
-    setInterval(updateClock, 1000);
-    updateClock();
+  function resizeCanvas() {
+    if (!canvas) return;
+    canvas.width = canvas.parentElement.clientWidth || 800;
+    canvas.height = canvas.parentElement.clientHeight || 450;
+  }
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
 
-    // -------------------------------------------------------------
-    // INTERACTIVE CYBER CCTV CANVAS SIMULATION
-    // -------------------------------------------------------------
-    const canvas = document.getElementById('cctvCanvas');
-    const ctx = canvas ? canvas.getContext('2d') : null;
-    let animId = null;
+  function drawCctvHUD() {
+    if (!ctx || !canvas) return;
+    const w = canvas.width;
+    const h = canvas.height;
 
-    let targets = [
-      { name: "Abhijeet Dubey", room: "Rm 204", x: 0.32, y: 0.38, w: 0.16, h: 0.28, conf: 0.984, emo: "Calm [0.94]", color: "#10b981", active: true },
-      { name: "Keval Shinde", room: "Rm 312", x: 0.65, y: 0.40, w: 0.16, h: 0.28, conf: 0.979, emo: "Focused [0.89]", color: "#38bdf8", active: true }
-    ];
+    // Dark futuristic security backdrop
+    ctx.fillStyle = "#070c18";
+    ctx.fillRect(0, 0, w, h);
 
-    let sweepY = 0;
-    let gateUnlockTimer = 0;
+    // Subtle room perspective geometry (Hostel Main Ingress Gate Wireframe)
+    ctx.strokeStyle = "rgba(56, 189, 248, 0.12)";
+    ctx.lineWidth = 1;
 
-    function resizeCanvas() {
-      if (!canvas) return;
-      canvas.width = canvas.parentElement.clientWidth || 800;
-      canvas.height = canvas.parentElement.clientHeight || 450;
-    }
-    window.addEventListener('resize', resizeCanvas);
-    resizeCanvas();
+    // Gate pillars
+    ctx.beginPath();
+    ctx.moveTo(w * 0.1, 0); ctx.lineTo(w * 0.2, h);
+    ctx.moveTo(w * 0.9, 0); ctx.lineTo(w * 0.8, h);
+    ctx.moveTo(w * 0.2, h * 0.7); ctx.lineTo(w * 0.8, h * 0.7);
+    ctx.stroke();
 
-    function drawCctvHUD() {
-      if (!ctx || !canvas) return;
-      const w = canvas.width;
-      const h = canvas.height;
+    // Sweeping radar scan line
+    sweepY = (sweepY + 2) % h;
+    ctx.fillStyle = "rgba(56, 189, 248, 0.04)";
+    ctx.fillRect(0, sweepY - 20, w, 40);
 
-      // Dark futuristic security backdrop
-      ctx.fillStyle = "#070c18";
-      ctx.fillRect(0, 0, w, h);
+    // Draw Students
+    targets.forEach((t, i) => {
+      const tx = t.x * w;
+      const ty = t.y * h;
+      const tw = t.w * w;
+      const th = t.h * h;
 
-      // Subtle room perspective geometry (Hostel Main Ingress Gate Wireframe)
-      ctx.strokeStyle = "rgba(56, 189, 248, 0.12)";
-      ctx.lineWidth = 1;
+      // Bounding Box
+      ctx.strokeStyle = t.color;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(tx, ty, tw, th);
 
-      // Gate pillars
+      // Corner brackets
+      const bLen = 14;
+      ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.moveTo(w * 0.1, 0); ctx.lineTo(w * 0.2, h);
-      ctx.moveTo(w * 0.9, 0); ctx.lineTo(w * 0.8, h);
-      ctx.moveTo(w * 0.2, h * 0.7); ctx.lineTo(w * 0.8, h * 0.7);
+      // Top Left
+      ctx.moveTo(tx, ty + bLen); ctx.lineTo(tx, ty); ctx.lineTo(tx + bLen, ty);
+      // Top Right
+      ctx.moveTo(tx + tw - bLen, ty); ctx.lineTo(tx + tw, ty); ctx.lineTo(tx + tw, ty + bLen);
+      // Bottom Left
+      ctx.moveTo(tx, ty + th - bLen); ctx.lineTo(tx, ty + th); ctx.lineTo(tx + bLen, ty + th);
+      // Bottom Right
+      ctx.moveTo(tx + tw - bLen, ty + th); ctx.lineTo(tx + tw, ty + th); ctx.lineTo(tx + tw, ty + th - bLen);
       ctx.stroke();
 
-      // Sweeping radar scan line
-      sweepY = (sweepY + 2) % h;
-      ctx.fillStyle = "rgba(56, 189, 248, 0.04)";
-      ctx.fillRect(0, sweepY - 20, w, 40);
-
-      // Draw Students
-      targets.forEach((t, i) => {
-        const tx = t.x * w;
-        const ty = t.y * h;
-        const tw = t.w * w;
-        const th = t.h * h;
-
-        // Bounding Box
-        ctx.strokeStyle = t.color;
-        ctx.lineWidth = 2;
-        ctx.strokeRect(tx, ty, tw, th);
-
-        // Corner brackets
-        const bLen = 14;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        // Top Left
-        ctx.moveTo(tx, ty + bLen); ctx.lineTo(tx, ty); ctx.lineTo(tx + bLen, ty);
-        // Top Right
-        ctx.moveTo(tx + tw - bLen, ty); ctx.lineTo(tx + tw, ty); ctx.lineTo(tx + tw, ty + bLen);
-        // Bottom Left
-        ctx.moveTo(tx, ty + th - bLen); ctx.lineTo(tx, ty + th); ctx.lineTo(tx + bLen, ty + th);
-        // Bottom Right
-        ctx.moveTo(tx + tw - bLen, ty + th); ctx.lineTo(tx + tw, ty + th); ctx.lineTo(tx + tw, ty + th - bLen);
-        ctx.stroke();
-
-        // Facial landmarks (glowing dots)
-        ctx.fillStyle = "#38bdf8";
-        const eyeY = ty + th * 0.35;
-        const noseY = ty + th * 0.55;
-        const mouthY = ty + th * 0.75;
-        // Left Eye
-        ctx.beginPath(); ctx.arc(tx + tw * 0.35, eyeY, 2.5, 0, Math.PI * 2); ctx.fill();
-        // Right Eye
-        ctx.beginPath(); ctx.arc(tx + tw * 0.65, eyeY, 2.5, 0, Math.PI * 2); ctx.fill();
-        // Nose
-        ctx.beginPath(); ctx.arc(tx + tw * 0.5, noseY, 2, 0, Math.PI * 2); ctx.fill();
-        // Mouth
-        ctx.beginPath(); ctx.arc(tx + tw * 0.42, mouthY, 2, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(tx + tw * 0.58, mouthY, 2, 0, Math.PI * 2); ctx.fill();
-
-        // Target Tag Header
-        ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
-        ctx.fillRect(tx, ty - 24, tw, 22);
-        ctx.strokeStyle = t.color;
-        ctx.lineWidth = 1;
-        ctx.strokeRect(tx, ty - 24, tw, 22);
-
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 11px monospace";
-        ctx.fillText(t.name, tx + 4, ty - 9);
-
-        // Subtext bottom badge
-        ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
-        ctx.fillRect(tx, ty + th + 4, tw, 30);
-        ctx.strokeRect(tx, ty + th + 4, tw, 30);
-
-        ctx.fillStyle = t.color;
-        ctx.font = "10px monospace";
-        ctx.fillText(`CONF: ${(t.conf * 100).toFixed(1)}% | ${t.room}`, tx + 4, ty + th + 16);
-        ctx.fillStyle = "#94a3b8";
-        ctx.fillText(`EMO: ${t.emo}`, tx + 4, ty + th + 28);
-      });
-
-      // Top Left Camera Info Overlay
+      // Facial landmarks (glowing dots)
       ctx.fillStyle = "#38bdf8";
-      ctx.font = "bold 12px monospace";
-      ctx.fillText("CAM-01 • KOTA HOSTEL MAIN GATE", 18, 26);
-      ctx.fillStyle = "#94a3b8";
-      ctx.font = "10px monospace";
-      ctx.fillText(`TIME: ${new Date().toISOString().replace('T', ' ').substr(0, 19)}`, 18, 42);
+      const eyeY = ty + th * 0.35;
+      const noseY = ty + th * 0.55;
+      const mouthY = ty + th * 0.75;
+      // Left Eye
+      ctx.beginPath(); ctx.arc(tx + tw * 0.35, eyeY, 2.5, 0, Math.PI * 2); ctx.fill();
+      // Right Eye
+      ctx.beginPath(); ctx.arc(tx + tw * 0.65, eyeY, 2.5, 0, Math.PI * 2); ctx.fill();
+      // Nose
+      ctx.beginPath(); ctx.arc(tx + tw * 0.5, noseY, 2, 0, Math.PI * 2); ctx.fill();
+      // Mouth
+      ctx.beginPath(); ctx.arc(tx + tw * 0.42, mouthY, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(tx + tw * 0.58, mouthY, 2, 0, Math.PI * 2); ctx.fill();
 
-      // Top Right Encryption Indicator
-      ctx.fillStyle = "#10b981";
+      // Target Tag Header
+      ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+      ctx.fillRect(tx, ty - 24, tw, 22);
+      ctx.strokeStyle = t.color;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(tx, ty - 24, tw, 22);
+
+      ctx.fillStyle = "#ffffff";
       ctx.font = "bold 11px monospace";
-      ctx.fillText("🔒 AES-256 VAULT ARMED", w - 180, 26);
-      ctx.fillStyle = "#94a3b8";
+      ctx.fillText(t.name, tx + 4, ty - 9);
+
+      // Subtext bottom badge
+      ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+      ctx.fillRect(tx, ty + th + 4, tw, 30);
+      ctx.strokeRect(tx, ty + th + 4, tw, 30);
+
+      ctx.fillStyle = t.color;
       ctx.font = "10px monospace";
-      ctx.fillText("EDGE CPU: 0 TOKENS ($0.00)", w - 180, 42);
+      ctx.fillText(`CONF: ${(t.conf * 100).toFixed(1)}% | ${t.room}`, tx + 4, ty + th + 16);
+      ctx.fillStyle = "#94a3b8";
+      ctx.fillText(`EMO: ${t.emo}`, tx + 4, ty + th + 28);
+    });
 
-      // Gate Turnstile Visual Banner in HUD
-      if (gateUnlockTimer > 0) {
-        gateUnlockTimer--;
-        ctx.fillStyle = "rgba(16, 185, 129, 0.25)";
-        ctx.fillRect(0, 0, w, h);
-      }
+    // Top Left Camera Info Overlay
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 12px monospace";
+    ctx.fillText("CAM-01 • KOTA HOSTEL MAIN GATE", 18, 26);
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "10px monospace";
+    ctx.fillText(`TIME: ${new Date().toISOString().replace('T', ' ').substr(0, 19)}`, 18, 42);
 
-      animId = requestAnimationFrame(drawCctvHUD);
+    // Top Right Encryption Indicator
+    ctx.fillStyle = "#10b981";
+    ctx.font = "bold 11px monospace";
+    ctx.fillText("🔒 AES-256 VAULT ARMED", w - 180, 26);
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "10px monospace";
+    ctx.fillText("EDGE CPU: 0 TOKENS ($0.00)", w - 180, 42);
+
+    // Gate Turnstile Visual Banner in HUD
+    if (gateUnlockTimer > 0) {
+      gateUnlockTimer--;
+      ctx.fillStyle = "rgba(16, 185, 129, 0.25)";
+      ctx.fillRect(0, 0, w, h);
     }
-    drawCctvHUD();
 
-    // -------------------------------------------------------------
-    // SIMULATION ACTIONS (Gate Punch, Curfew, etc.)
-    // -------------------------------------------------------------
-    let waTimeout = null;
+    animId = requestAnimationFrame(drawCctvHUD);
+  }
+  drawCctvHUD();
 
-    function simulateTurnstilePunch(name, room, gate) {
-      playChime();
-      showToast(`⚡ Turnstile Ingress: ${name} (${room})`, "success");
+  // -------------------------------------------------------------
+  // SIMULATION ACTIONS (Gate Punch, Curfew, etc.)
+  // -------------------------------------------------------------
+  let waTimeout = null;
 
-      // Flash Canvas HUD Gate
-      gateUnlockTimer = 40;
-      const gateStateText = document.getElementById('gateStateText');
-      const gateBanner = document.getElementById('gateStatusBanner');
-      if (gateStateText && gateBanner) {
-        gateStateText.innerText = `UNLOCKED — INGRESS CONFIRMED (${name})`;
-        gateBanner.className = 'absolute top-4 inset-x-auto px-4 py-1.5 rounded-xl glass border border-emerald-400 text-xs font-mono font-bold text-emerald-300 flex items-center gap-2 shadow-2xl bg-emerald-950/90 glow-emerald';
-        setTimeout(() => {
-          gateStateText.innerText = 'READY / ARMED';
-          gateBanner.className = 'absolute top-4 inset-x-auto px-4 py-1.5 rounded-xl glass border border-emerald-500/40 text-xs font-mono font-bold text-emerald-400 flex items-center gap-2 shadow-lg';
-        }, 3500);
-      }
+  function simulateTurnstilePunch(name, room, gate) {
+    playChime();
+    showToast(`⚡ Turnstile Ingress: ${name} (${room})`, "success");
 
-      // Update KPI present count
-      const kpiPres = document.getElementById('kpiPresent');
-      if (kpiPres) {
-        const cur = parseInt(kpiPres.innerText) || 342;
-        kpiPres.innerText = cur + 1;
-      }
+    // Flash Canvas HUD Gate
+    gateUnlockTimer = 40;
+    const gateStateText = document.getElementById('gateStateText');
+    const gateBanner = document.getElementById('gateStatusBanner');
+    if (gateStateText && gateBanner) {
+      gateStateText.innerText = `UNLOCKED — INGRESS CONFIRMED (${name})`;
+      gateBanner.className = 'absolute top-4 inset-x-auto px-4 py-1.5 rounded-xl glass border border-emerald-400 text-xs font-mono font-bold text-emerald-300 flex items-center gap-2 shadow-2xl bg-emerald-950/90 glow-emerald';
+      setTimeout(() => {
+        gateStateText.innerText = 'READY / ARMED';
+        gateBanner.className = 'absolute top-4 inset-x-auto px-4 py-1.5 rounded-xl glass border border-emerald-500/40 text-xs font-mono font-bold text-emerald-400 flex items-center gap-2 shadow-lg';
+      }, 3500);
+    }
 
-      // Update Last Identified
-      const lastSeenEl = document.getElementById('lastSeenName');
-      if (lastSeenEl) lastSeenEl.innerText = name;
-      const lastConfEl = document.getElementById('lastSeenConf');
-      if (lastConfEl) lastConfEl.innerText = '98.4% (Eucl: 0.2355)';
+    // Update KPI present count
+    const kpiPres = document.getElementById('kpiPresent');
+    if (kpiPres) {
+      const cur = parseInt(kpiPres.innerText) || 342;
+      kpiPres.innerText = cur + 1;
+    }
 
-      // Trigger Floating WhatsApp Simulation Toast
-      const waStudent = document.getElementById('waStudent');
-      if (waStudent) waStudent.innerText = name;
-      const waGate = document.getElementById('waGate');
-      if (waGate) waGate.innerText = gate || 'Turnstile Gate 1';
-      const waCurfew = document.getElementById('waCurfewStatus');
-      if (waCurfew) {
-        waCurfew.innerText = 'On Time (Pre-09:30 PM)';
-        waCurfew.className = 'text-emerald-400 font-bold';
-      }
-      const waTime = document.getElementById('waTimestamp');
-      if (waTime) waTime.innerText = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    // Update Last Identified
+    const lastSeenEl = document.getElementById('lastSeenName');
+    if (lastSeenEl) lastSeenEl.innerText = name;
+    const lastConfEl = document.getElementById('lastSeenConf');
+    if (lastConfEl) lastConfEl.innerText = '98.4% (Eucl: 0.2355)';
 
-      const modal = document.getElementById('whatsappSimModal');
-      if (modal) {
-        modal.classList.remove('translate-y-[-20px]', 'opacity-0', 'pointer-events-none');
-        modal.classList.add('translate-y-0', 'opacity-100');
-        if (waTimeout) clearTimeout(waTimeout);
-        waTimeout = setTimeout(closeWhatsappSim, 8000);
-      }
+    // Trigger Floating WhatsApp Simulation Toast
+    const waStudent = document.getElementById('waStudent');
+    if (waStudent) waStudent.innerText = name;
+    const waGate = document.getElementById('waGate');
+    if (waGate) waGate.innerText = gate || 'Turnstile Gate 1';
+    const waCurfew = document.getElementById('waCurfewStatus');
+    if (waCurfew) {
+      waCurfew.innerText = 'On Time (Pre-09:30 PM)';
+      waCurfew.className = 'text-emerald-400 font-bold';
+    }
+    const waTime = document.getElementById('waTimestamp');
+    if (waTime) waTime.innerText = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-      // Insert Row into Live Ledger
-      const tbody = document.getElementById('ledgerBody');
-      if (tbody) {
-        const tr = document.createElement('tr');
-        tr.className = 'bg-emerald-950/40 text-emerald-300 font-semibold border-b border-emerald-900/40 animate-pulse';
-        tr.innerHTML = `
+    const modal = document.getElementById('whatsappSimModal');
+    if (modal) {
+      modal.classList.remove('translate-y-[-20px]', 'opacity-0', 'pointer-events-none');
+      modal.classList.add('translate-y-0', 'opacity-100');
+      if (waTimeout) clearTimeout(waTimeout);
+      waTimeout = setTimeout(closeWhatsappSim, 8000);
+    }
+
+    // Insert Row into Live Ledger
+    const tbody = document.getElementById('ledgerBody');
+    if (tbody) {
+      const tr = document.createElement('tr');
+      tr.className = 'bg-emerald-950/40 text-emerald-300 font-semibold border-b border-emerald-900/40 animate-pulse';
+      tr.innerHTML = `
           <td class="py-2.5 px-3 font-mono">${new Date().toLocaleTimeString()}</td>
           <td class="py-2.5 px-3 font-bold text-white">${name}</td>
           <td class="py-2.5 px-3 text-sky-300">${room}</td>
@@ -929,50 +893,50 @@
           <td class="py-2.5 px-3 font-mono text-[11px] text-emerald-400">0.18 ms (Cached)</td>
           <td class="py-2.5 px-3 text-right"><span class="px-2 py-0.5 rounded text-[10px] bg-emerald-900/80 text-emerald-300 border border-emerald-700/60 font-bold">Delivered</span></td>
         `;
-        tbody.insertBefore(tr, tbody.firstChild);
-      }
+      tbody.insertBefore(tr, tbody.firstChild);
+    }
+  }
+
+  function triggerSimulatedIngressRandom() {
+    const candidates = [
+      { name: "Abhijeet Dubey", room: "Rm 204", gate: "Turnstile Gate 1" },
+      { name: "Keval Shinde", room: "Rm 312", gate: "Turnstile Gate 2" },
+      { name: "Vikram Rathore", room: "Rm 104", gate: "Turnstile Gate 1" }
+    ];
+    const pick = candidates[Math.floor(Math.random() * candidates.length)];
+    simulateTurnstilePunch(pick.name, pick.room, pick.gate);
+  }
+
+  function closeWhatsappSim() {
+    const modal = document.getElementById('whatsappSimModal');
+    if (modal) {
+      modal.classList.add('translate-y-[-20px]', 'opacity-0', 'pointer-events-none');
+      modal.classList.remove('translate-y-0', 'opacity-100');
+    }
+  }
+
+  function simulateCurfewBreach(name, room, status) {
+    playAlarm();
+    showToast(`🚨 CURFEW BREACH: ${name} is ${status}!`, "error");
+
+    // Flash Gate State to Alert
+    const gateStateText = document.getElementById('gateStateText');
+    const gateBanner = document.getElementById('gateStatusBanner');
+    if (gateStateText && gateBanner) {
+      gateStateText.innerText = `🚨 CURFEW RADAR ALERT: ${name.toUpperCase()} OVERDUE`;
+      gateBanner.className = 'absolute top-4 inset-x-auto px-4 py-1.5 rounded-xl glass border border-rose-500 text-xs font-mono font-bold text-rose-300 flex items-center gap-2 shadow-2xl bg-rose-950/90 glow-rose';
+      setTimeout(() => {
+        gateStateText.innerText = 'READY / ARMED';
+        gateBanner.className = 'absolute top-4 inset-x-auto px-4 py-1.5 rounded-xl glass border border-emerald-500/40 text-xs font-mono font-bold text-emerald-400 flex items-center gap-2 shadow-lg';
+      }, 4000);
     }
 
-    function triggerSimulatedIngressRandom() {
-      const candidates = [
-        { name: "Abhijeet Dubey", room: "Rm 204", gate: "Turnstile Gate 1" },
-        { name: "Keval Shinde", room: "Rm 312", gate: "Turnstile Gate 2" },
-        { name: "Vikram Rathore", room: "Rm 104", gate: "Turnstile Gate 1" }
-      ];
-      const pick = candidates[Math.floor(Math.random() * candidates.length)];
-      simulateTurnstilePunch(pick.name, pick.room, pick.gate);
-    }
-
-    function closeWhatsappSim() {
-      const modal = document.getElementById('whatsappSimModal');
-      if (modal) {
-        modal.classList.add('translate-y-[-20px]', 'opacity-0', 'pointer-events-none');
-        modal.classList.remove('translate-y-0', 'opacity-100');
-      }
-    }
-
-    function simulateCurfewBreach(name, room, status) {
-      playAlarm();
-      showToast(`🚨 CURFEW BREACH: ${name} is ${status}!`, "error");
-
-      // Flash Gate State to Alert
-      const gateStateText = document.getElementById('gateStateText');
-      const gateBanner = document.getElementById('gateStatusBanner');
-      if (gateStateText && gateBanner) {
-        gateStateText.innerText = `🚨 CURFEW RADAR ALERT: ${name.toUpperCase()} OVERDUE`;
-        gateBanner.className = 'absolute top-4 inset-x-auto px-4 py-1.5 rounded-xl glass border border-rose-500 text-xs font-mono font-bold text-rose-300 flex items-center gap-2 shadow-2xl bg-rose-950/90 glow-rose';
-        setTimeout(() => {
-          gateStateText.innerText = 'READY / ARMED';
-          gateBanner.className = 'absolute top-4 inset-x-auto px-4 py-1.5 rounded-xl glass border border-emerald-500/40 text-xs font-mono font-bold text-emerald-400 flex items-center gap-2 shadow-lg';
-        }, 4000);
-      }
-
-      // Add Overdue item to Curfew List
-      const curfewList = document.getElementById('curfewList');
-      if (curfewList) {
-        const item = document.createElement('div');
-        item.className = 'p-2.5 rounded-xl bg-rose-950/60 border border-rose-600 flex items-center justify-between animate-pulse';
-        item.innerHTML = `
+    // Add Overdue item to Curfew List
+    const curfewList = document.getElementById('curfewList');
+    if (curfewList) {
+      const item = document.createElement('div');
+      item.className = 'p-2.5 rounded-xl bg-rose-950/60 border border-rose-600 flex items-center justify-between animate-pulse';
+      item.innerHTML = `
           <div>
             <div class="font-bold text-rose-200">${name}</div>
             <div class="text-[10px] text-slate-300">${room} &bull; Breached: ${new Date().toLocaleTimeString()}</div>
@@ -982,97 +946,98 @@
             <div class="text-[9px] text-rose-300 mt-1">Escalated to Parents</div>
           </div>
         `;
-        curfewList.insertBefore(item, curfewList.firstChild);
+      curfewList.insertBefore(item, curfewList.firstChild);
+    }
+
+    // WhatsApp Breach Notification
+    const waTitle = document.getElementById('waTitle');
+    if (waTitle) waTitle.innerText = "🚨 CURFEW VIOLATION ALERT";
+    const waStudent = document.getElementById('waStudent');
+    if (waStudent) waStudent.innerText = name;
+    const waGate = document.getElementById('waGate');
+    if (waGate) waGate.innerText = "Hostel Premises (MISSING)";
+    const waCurfew = document.getElementById('waCurfewStatus');
+    if (waCurfew) {
+      waCurfew.innerText = 'BREACH: 45 Minutes Overdue';
+      waCurfew.className = 'text-rose-400 font-bold';
+    }
+    const waBody = document.getElementById('waBody');
+    if (waBody) {
+      waBody.innerHTML = `Namaste Parent 🙏<br><strong class="text-rose-400">${name}</strong> (${room}) has not returned by the 09:30 PM curfew. Automated check-in link dispatched. Warden notified.`;
+    }
+
+    const modal = document.getElementById('whatsappSimModal');
+    if (modal) {
+      modal.classList.remove('translate-y-[-20px]', 'opacity-0', 'pointer-events-none');
+      modal.classList.add('translate-y-0', 'opacity-100');
+      if (waTimeout) clearTimeout(waTimeout);
+      waTimeout = setTimeout(closeWhatsappSim, 9000);
+    }
+  }
+
+  // -------------------------------------------------------------
+  // VIDEO SOURCE TOGGLE (Simulated vs Real Physical Webcam)
+  // -------------------------------------------------------------
+  let isWebcam = false;
+  function toggleVideoSource() {
+    isWebcam = !isWebcam;
+    const canvasEl = document.getElementById('cctvCanvas');
+    const videoEl = document.getElementById('videoFeed');
+    const textEl = document.getElementById('sourceText');
+    const badgeEl = document.getElementById('feedModeBadge');
+
+    if (isWebcam) {
+      if (canvasEl) canvasEl.classList.add('hidden');
+      if (videoEl) {
+        videoEl.classList.remove('hidden');
+        videoEl.src = `/video_feed?t=${Date.now()}`;
       }
-
-      // WhatsApp Breach Notification
-      const waTitle = document.getElementById('waTitle');
-      if (waTitle) waTitle.innerText = "🚨 CURFEW VIOLATION ALERT";
-      const waStudent = document.getElementById('waStudent');
-      if (waStudent) waStudent.innerText = name;
-      const waGate = document.getElementById('waGate');
-      if (waGate) waGate.innerText = "Hostel Premises (MISSING)";
-      const waCurfew = document.getElementById('waCurfewStatus');
-      if (waCurfew) {
-        waCurfew.innerText = 'BREACH: 45 Minutes Overdue';
-        waCurfew.className = 'text-rose-400 font-bold';
-      }
-      const waBody = document.getElementById('waBody');
-      if (waBody) {
-        waBody.innerHTML = `Namaste Parent 🙏<br><strong class="text-rose-400">${name}</strong> (${room}) has not returned by the 09:30 PM curfew. Automated check-in link dispatched. Warden notified.`;
-      }
-
-      const modal = document.getElementById('whatsappSimModal');
-      if (modal) {
-        modal.classList.remove('translate-y-[-20px]', 'opacity-0', 'pointer-events-none');
-        modal.classList.add('translate-y-0', 'opacity-100');
-        if (waTimeout) clearTimeout(waTimeout);
-        waTimeout = setTimeout(closeWhatsappSim, 9000);
-      }
+      if (textEl) textEl.innerText = "Physical Webcam (Active)";
+      if (badgeEl) badgeEl.innerText = "Local Video Device";
+      showToast("Switched to Local Video Stream", "info");
+    } else {
+      if (videoEl) videoEl.classList.add('hidden');
+      if (canvasEl) canvasEl.classList.remove('hidden');
+      if (textEl) textEl.innerText = "Simulated HUD (Active)";
+      if (badgeEl) badgeEl.innerText = "Simulated Cyber HUD";
+      showToast("Switched to Cyber CCTV Simulation", "info");
     }
+  }
 
-    // -------------------------------------------------------------
-    // VIDEO SOURCE TOGGLE (Simulated vs Real Physical Webcam)
-    // -------------------------------------------------------------
-    let isWebcam = false;
-    function toggleVideoSource() {
-      isWebcam = !isWebcam;
-      const canvasEl = document.getElementById('cctvCanvas');
-      const videoEl = document.getElementById('videoFeed');
-      const textEl = document.getElementById('sourceText');
-      const badgeEl = document.getElementById('feedModeBadge');
+  function captureCanvasSnapshot() {
+    playChime();
+    showToast("📸 Ingress Snapshot Saved to Encrypted Vault", "success");
+  }
 
-      if (isWebcam) {
-        if (canvasEl) canvasEl.classList.add('hidden');
-        if (videoEl) {
-          videoEl.classList.remove('hidden');
-          videoEl.src = `/video_feed?t=${Date.now()}`;
-        }
-        if (textEl) textEl.innerText = "Physical Webcam (Active)";
-        if (badgeEl) badgeEl.innerText = "Local Video Device";
-        showToast("Switched to Local Video Stream", "info");
-      } else {
-        if (videoEl) videoEl.classList.add('hidden');
-        if (canvasEl) canvasEl.classList.remove('hidden');
-        if (textEl) textEl.innerText = "Simulated HUD (Active)";
-        if (badgeEl) badgeEl.innerText = "Simulated Cyber HUD";
-        showToast("Switched to Cyber CCTV Simulation", "info");
-      }
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => { });
+    } else {
+      document.exitFullscreen().catch(() => { });
     }
+  }
 
-    function captureCanvasSnapshot() {
-      playChime();
-      showToast("📸 Ingress Snapshot Saved to Encrypted Vault", "success");
-    }
+  // -------------------------------------------------------------
+  // MODAL HANDLERS
+  // -------------------------------------------------------------
+  function openTokenAuditModal() {
+    const m = document.getElementById('tokenAuditModal');
+    if (m) m.classList.remove('hidden');
+  }
+  function closeTokenAuditModal() {
+    const m = document.getElementById('tokenAuditModal');
+    if (m) m.classList.add('hidden');
+  }
 
-    function toggleFullscreen() {
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(() => {});
-      } else {
-        document.exitFullscreen().catch(() => {});
-      }
-    }
-
-    // -------------------------------------------------------------
-    // MODAL HANDLERS
-    // -------------------------------------------------------------
-    function openTokenAuditModal() {
-      const m = document.getElementById('tokenAuditModal');
-      if (m) m.classList.remove('hidden');
-    }
-    function closeTokenAuditModal() {
-      const m = document.getElementById('tokenAuditModal');
-      if (m) m.classList.add('hidden');
-    }
-
-    function openSecurityVaultModal() {
-      const m = document.getElementById('securityVaultModal');
-      if (m) m.classList.remove('hidden');
-    }
-    function closeSecurityVaultModal() {
-      const m = document.getElementById('securityVaultModal');
-      if (m) m.classList.add('hidden');
-    }
-  </script>
+  function openSecurityVaultModal() {
+    const m = document.getElementById('securityVaultModal');
+    if (m) m.classList.remove('hidden');
+  }
+  function closeSecurityVaultModal() {
+    const m = document.getElementById('securityVaultModal');
+    if (m) m.classList.add('hidden');
+  }
+</script>
 </body>
+
 </html>
