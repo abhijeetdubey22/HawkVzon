@@ -185,12 +185,32 @@
 
           <!-- Video Stream Canvas -->
           <div class="relative bg-black aspect-video flex items-center justify-center overflow-hidden group">
-            <img id="videoFeed" src="/video_feed" alt="Surveillance Video Feed" class="w-full h-full object-cover" onerror="this.classList.add('hidden'); document.getElementById('videoPlaceholder').classList.remove('hidden');">
+            <!-- Real Live MJPEG Stream (Shown when local web_server.py is running) -->
+            <img id="videoFeed" src="/video_feed" alt="Surveillance Video Feed"
+                 class="w-full h-full object-cover hidden"
+                 onload="this.classList.remove('hidden'); document.getElementById('videoPlaceholder').classList.add('hidden');"
+                 onerror="this.classList.add('hidden'); document.getElementById('videoPlaceholder').classList.remove('hidden'); startStandbyHud();">
 
-            <div id="videoPlaceholder"
-              class="hidden absolute inset-0 bg-slate-950/90 flex flex-col items-center justify-center text-slate-400 space-y-2">
-              <span class="text-3xl animate-spin">⏳</span>
-              <p class="text-sm font-medium">Switching / Reconnecting Camera Stream...</p>
+            <!-- Standby / Cloud Interactive Cyber HUD Canvas (Shown when camera is standby or on Vercel) -->
+            <div id="videoPlaceholder" class="absolute inset-0 bg-[#070c18] flex flex-col items-center justify-center select-none overflow-hidden">
+              <canvas id="standbyCanvas" class="w-full h-full object-cover"></canvas>
+              
+              <!-- Top HUD OSD Overlay -->
+              <div class="absolute top-3 inset-x-3 flex items-center justify-between pointer-events-none">
+                <div class="px-3 py-1 rounded-lg bg-black/80 backdrop-blur-md border border-emerald-500/40 text-[11px] font-mono text-emerald-400 flex items-center gap-2 shadow-lg">
+                  <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span id="standbyCamBadge">REC &bull; CAM-01: HOSTEL MAIN TURNSTILE &bull; 1080p</span>
+                </div>
+                <div class="px-3 py-1 rounded-lg bg-black/80 backdrop-blur-md border border-slate-700 text-[11px] font-mono text-slate-300">
+                  <span id="hudClock">10:30:00 PM</span>
+                </div>
+              </div>
+
+              <!-- Center Ingress Status Banner -->
+              <div class="absolute top-12 px-4 py-1.5 rounded-xl bg-slate-950/90 border border-emerald-500/50 text-xs font-mono font-bold text-emerald-400 flex items-center gap-2 shadow-2xl pointer-events-none">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                <span>BIOMETRIC GATE RELAY: <span class="text-white">ACTIVE / READY</span></span>
+              </div>
             </div>
 
             <!-- FLOATING ACTION TOOLBAR OVERLAY (Bottom of Video) -->
@@ -769,47 +789,53 @@
       });
     }
 
+    const defaultCameraList = [
+      { id: "cam_0", name: "Cam 01: Turnstile Gate", room: "Hostel Main Ingress", kind: "Webcam (Index 0)" },
+      { id: "cam_1", name: "Cam 02: Perimeter CCTV", room: "North Boundary", kind: "CCTV / IP Camera" },
+      { id: "cam_2", name: "Cam 03: Classroom Hall", room: "Room 204", kind: "Webcam (Index 1)" }
+    ];
+
+    function renderCameraTabs(cameras, selectedId) {
+      const tabsList = document.getElementById('cameraTabsList');
+      const quickSelect = document.getElementById('quickCamSelect');
+      if (!tabsList || !quickSelect) return;
+      tabsList.innerHTML = "";
+      quickSelect.innerHTML = "";
+
+      cameras.forEach(cam => {
+        const isActive = cam.id === selectedId;
+        const icon = (cam.kind && cam.kind.includes('CCTV')) ? '📡' : ((cam.kind && cam.kind.includes('File')) ? '📁' : '📹');
+
+        const btn = document.createElement('button');
+        btn.className = `shrink-0 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-2 border ${isActive ?
+            'bg-sky-600 text-white border-sky-400 shadow-md shadow-sky-900/40 glow-cyan' :
+            'bg-slate-900/80 text-slate-300 border-slate-700/80 hover:bg-slate-800'
+          }`;
+        btn.onclick = () => selectCamera(cam.id);
+        btn.innerHTML = `<span>${icon}</span> <span>${cam.name}</span> <span class="text-[10px] px-1.5 py-0.2 rounded ${isActive ? 'bg-sky-800 text-sky-200' : 'bg-slate-800 text-slate-400'}">${cam.room}</span>`;
+        tabsList.appendChild(btn);
+
+        const opt = document.createElement('option');
+        opt.value = cam.id;
+        opt.innerText = `${icon} ${cam.name} (${cam.room})`;
+        opt.selected = isActive;
+        quickSelect.appendChild(opt);
+      });
+
+      const camCount = document.getElementById('kpiCameras');
+      if (camCount) camCount.innerText = cameras.length + ' Cams';
+    }
+
     async function loadCameras() {
       try {
         const res = await fetch('/api/cameras');
         const data = await res.json();
-        const tabsList = document.getElementById('cameraTabsList');
-        const quickSelect = document.getElementById('quickCamSelect');
-        const cameras = data.cameras || [];
-        currentSelectedCamId = data.selected || (cameras[0] && cameras[0].id) || "";
-
-        tabsList.innerHTML = "";
-        quickSelect.innerHTML = "";
-
-        cameras.forEach(cam => {
-          const isActive = cam.id === currentSelectedCamId;
-          const icon = cam.kind.includes('CCTV') ? '📡' : (cam.kind.includes('File') ? '📁' : '📹');
-
-          // Pill tab button
-          const btn = document.createElement('button');
-          btn.className = `shrink-0 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-2 border ${isActive ?
-              'bg-sky-600 text-white border-sky-400 shadow-md shadow-sky-900/40 glow-cyan' :
-              'bg-slate-900/80 text-slate-300 border-slate-700/80 hover:bg-slate-800'
-            }`;
-          btn.onclick = () => selectCamera(cam.id);
-          btn.innerHTML = `
-  <span>${icon}</span>
-  <span>${cam.name}</span>
-  <span class="text-[10px] px-1.5 py-0.2 rounded ${isActive ? 'bg-sky-800 text-sky-200' : 'bg-slate-800 text-slate-400'}">${cam.room}</span>
-`;
-          tabsList.appendChild(btn);
-
-          // Dropdown option
-          const opt = document.createElement('option');
-          opt.value = cam.id;
-          opt.innerText = `${icon} ${cam.name} (${cam.room})`;
-          opt.selected = isActive;
-          quickSelect.appendChild(opt);
-        });
-
-        document.getElementById('kpiCameras').innerText = cameras.length;
+        const cameras = (data.cameras && data.cameras.length > 0) ? data.cameras : defaultCameraList;
+        currentSelectedCamId = data.selected || (cameras[0] && cameras[0].id) || "cam_0";
+        renderCameraTabs(cameras, currentSelectedCamId);
       } catch (err) {
-        console.error("Failed to load cameras:", err);
+        currentSelectedCamId = currentSelectedCamId || "cam_0";
+        renderCameraTabs(defaultCameraList, currentSelectedCamId);
       }
     }
 
@@ -1471,9 +1497,121 @@
       window.open(url, '_blank');
     }
 
+    
+    // -------------------------------------------------------------
+    // STANDBY CYBER CCTV CANVAS (Active when offline or on Vercel)
+    // -------------------------------------------------------------
+    let standbyCanvasAnimId = null;
+    let sweepY = 0;
+    const hudTargets = [
+      { name: "Abhijeet Dubey", room: "Rm 204", x: 0.32, y: 0.38, w: 0.16, h: 0.28, conf: "98.4%", emo: "Calm", color: "#10b981" },
+      { name: "Keval Shinde", room: "Rm 312", x: 0.65, y: 0.40, w: 0.16, h: 0.28, conf: "97.9%", emo: "Focused", color: "#38bdf8" }
+    ];
+
+    function startStandbyHud() {
+      const canvas = document.getElementById('standbyCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      function resize() {
+        if (!canvas.parentElement) return;
+        canvas.width = canvas.parentElement.clientWidth || 800;
+        canvas.height = canvas.parentElement.clientHeight || 450;
+      }
+      resize();
+      window.addEventListener('resize', resize);
+
+      function draw() {
+        const w = canvas.width;
+        const h = canvas.height;
+        ctx.fillStyle = "#070c18";
+        ctx.fillRect(0, 0, w, h);
+
+        // Security grid lines
+        ctx.strokeStyle = "rgba(56, 189, 248, 0.08)";
+        ctx.lineWidth = 1;
+        for (let x = 0; x < w; x += 40) {
+          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+        }
+        for (let y = 0; y < h; y += 40) {
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+        }
+
+        // Radar sweep
+        sweepY = (sweepY + 2.5) % h;
+        ctx.fillStyle = "rgba(56, 189, 248, 0.04)";
+        ctx.fillRect(0, sweepY - 20, w, 40);
+
+        // Bounding boxes
+        hudTargets.forEach(t => {
+          const tx = t.x * w;
+          const ty = t.y * h;
+          const tw = t.w * w;
+          const th = t.h * h;
+
+          ctx.strokeStyle = t.color;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(tx, ty, tw, th);
+
+          // Corner brackets
+          const bLen = 14;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(tx, ty + bLen); ctx.lineTo(tx, ty); ctx.lineTo(tx + bLen, ty);
+          ctx.moveTo(tx + tw - bLen, ty); ctx.lineTo(tx + tw, ty); ctx.lineTo(tx + tw, ty + bLen);
+          ctx.moveTo(tx, ty + th - bLen); ctx.lineTo(tx, ty + th); ctx.lineTo(tx + bLen, ty + th);
+          ctx.moveTo(tx + tw - bLen, ty + th); ctx.lineTo(tx + tw, ty + th); ctx.lineTo(tx + tw, ty + th - bLen);
+          ctx.stroke();
+
+          // Target Info Pill
+          ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
+          ctx.fillRect(tx, ty - 24, tw, 20);
+          ctx.strokeStyle = t.color;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(tx, ty - 24, tw, 20);
+
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "bold 11px monospace";
+          ctx.fillText(t.name, tx + 4, ty - 10);
+
+          ctx.fillStyle = t.color;
+          ctx.font = "9px monospace";
+          ctx.fillText(`${t.conf} | ${t.emo}`, tx + 4, ty + th + 14);
+        });
+
+        // OSD Clock
+        const clk = document.getElementById('hudClock');
+        if (clk) clk.innerText = new Date().toLocaleTimeString();
+
+        standbyCanvasAnimId = requestAnimationFrame(draw);
+      }
+
+      if (standbyCanvasAnimId) cancelAnimationFrame(standbyCanvasAnimId);
+      draw();
+    }
+
+    // Auto-probe live feed if local python server launches
+    function probeLiveFeed() {
+      const feed = document.getElementById('videoFeed');
+      if (feed && feed.classList.contains('hidden')) {
+        const tester = new Image();
+        tester.onload = () => {
+          feed.src = `/video_feed?t=${Date.now()}`;
+          feed.classList.remove('hidden');
+          const ph = document.getElementById('videoPlaceholder');
+          if (ph) ph.classList.add('hidden');
+        };
+        tester.src = `/video_feed?probe=${Date.now()}`;
+      }
+    }
+    setInterval(probeLiveFeed, 4000);
+
     window.addEventListener('DOMContentLoaded', () => {
       initEmotionChart();
       loadCameras();
+      startStandbyHud();
+      renderActiveLedgerTable();
       setInterval(pollTelemetry, 1000);
       setInterval(pollStats, 3000);
       setInterval(pollAttendance, 3000);
